@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія "Тупе Полотно") ===
+// === sketch.js (Фінальна Версія "Тупе Полотно" v2 - Виправлені Трикутники) ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ (Тільки для малювання) ---
 let citiesData;
@@ -110,7 +110,7 @@ function checkAlertStatus() {
 }
 
 
-// === ФУНКЦІЇ МАЛЮВАННЯ (без змін) ===
+// === ФУНКЦІЇ МАЛЮВАННЯ ===
 
 // Малює ОДИН шрам на буфер (використовує p5)
 function drawScarToBuffer(start, end) {
@@ -130,12 +130,13 @@ function drawScarToBuffer(start, end) {
   staticMapBuffer.endShape();
 }
 
+// === 🔴 ФУНКЦІЯ З ВИПРАВЛЕНИМ ПОРЯДКОМ МЕЛЮВАННЯ ===
 function buildStaticDNA() {
   randomSeed(99);
   staticMapBuffer.background(10, 10, 20);
   if (!citiesData) { console.error('ПОМИЛКА: cities.json!'); return; }
   
-  // (Логіка для малювання міст і кластерів запуску)
+  // 1. Завантажуємо координати міст
   let regions = citiesData[0].regions;
   for (let region of regions) {
     for (let city of region.cities) {
@@ -145,6 +146,8 @@ function buildStaticDNA() {
       allCities.push({ name: city.name, pos: mapWithAspectRatio(lon, lat), lon: lon, lat: lat });
     }
   }
+  
+  // 2. Завантажуємо координати кластерів запуску
   let createLaunchCluster = (lon, lat, count, radius) => {
     let cluster = [];
     for (let i = 0; i < count; i++) {
@@ -158,38 +161,10 @@ function buildStaticDNA() {
   launchPoints['Black_Sea'] = createLaunchCluster(32.0, 46.0, 10, 0.5); 
   launchPoints['Caspian_Sea'] = createLaunchCluster(48.0, 46.0, 10, 0.5); 
   launchPoints['Belarus'] = createLaunchCluster(28.0, 52.2, 5, 0.5); 
-  
-  // Малюємо міста і кластери
-  staticMapBuffer.noStroke();
-  for (let city of allCities) {
-    if (majorCityNames.includes(city.name)) continue;
-    staticMapBuffer.fill(255, 255);
-    staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
-  }
-  staticMapBuffer.noStroke();
-  for (let city of allCities) {
-    if (majorCityNames.includes(city.name)) {
-      staticMapBuffer.fill(255, 255, 200, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
-      staticMapBuffer.fill(255, 255, 255, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
-    }
-  }
-  staticMapBuffer.noStroke();
-  for (let clusterName in launchPoints) {
-    let cluster = launchPoints[clusterName];
-    for (let launchPos of cluster) {
-      let s = 6;
-      staticMapBuffer.fill(255, 0, 0, 200);
-      staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
-      staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5;
-      staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
-    }
-  }
-  
-  // Малюємо 107,000 БАЗОВИХ шрамів (це тепер ВІДОКРЕМЛЕНО від "Пам'яті")
+    
+  // 3. Малюємо 107,000 БАЗОВИХ шрамів (СПОЧАТКУ)
   console.log('Генерація "DNA" (107,000 шрамів)...');
+  
   // (Нам потрібні цілі для генерації, але ми їх не зберігаємо)
   let tempTargetNodes = {
     frontline: generateFrontlinePoints(300),
@@ -220,9 +195,43 @@ function buildStaticDNA() {
     let startPoint = random(startCluster);
     drawScarToBuffer(startPoint, targetNode);
   }
-  console.log('Буфер "DNA" (107,000) готовий.');
+  console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
+
+  // 4. Малюємо МІСТА (ПОВЕРХ шрамів)
+  staticMapBuffer.noStroke();
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) continue;
+    staticMapBuffer.fill(255, 255);
+    staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+  }
+  staticMapBuffer.noStroke();
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) {
+      staticMapBuffer.fill(255, 255, 200, 255);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+      staticMapBuffer.fill(255, 255, 255, 255);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+    }
+  }
+  
+  // 5. Малюємо ТРИКУТНИКИ (ОСТАННІМИ, поверх усього)
+  staticMapBuffer.noStroke();
+  for (let clusterName in launchPoints) {
+    let cluster = launchPoints[clusterName];
+    for (let launchPos of cluster) {
+      let s = 6;
+      staticMapBuffer.fill(255, 0, 0, 200);
+      staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
+      staticMapBuffer.fill(255, 100, 100, 255);
+      s = 2.5;
+      staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
+    }
+  }
+  console.log('Буфер "DNA" (Міста та Трикутники) готовий.');
 }
+// === КІНЕЦЬ ВИПРАВЛЕНОЇ ФУНКЦІЇ ===
+
 
 // Функції-помічники (потрібні для `buildStaticDNA`)
 function mapWithAspectRatio(lon, lat) {
