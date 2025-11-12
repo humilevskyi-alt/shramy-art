@@ -1,30 +1,51 @@
-// === server.js (Фінальна Версія з "Пам'яттю" - Render + Neon) ===
+// === server.js (Фінальна Стійка Версія v3.1 - Авто-реконнект до Neon) ===
 
 import express from 'express'; 
 import axios from 'axios'; 
 import cors from 'cors'; 
-import pg from 'pg'; // 1. ІМПОРТУЄМО "ДРАЙВЕР" БАЗИ ДАНИХ
+import pg from 'pg'; // "Драйвер" бази даних
 
 // --- НАЛАШТУВАННЯ ---
 const app = express();
 const PORT = 3001; 
-const POLLING_INTERVAL = 15000; // 15 секунд (ми виправили ліміт)
+const POLLING_INTERVAL = 15000; // 15 секунд
 
-// 2. БЕРЕМО СЕКРЕТИ З RENDER (з Environment)
+// --- СЕКРЕТИ З RENDER ---
 const API_TOKEN = process.env.API_TOKEN;
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// Налаштування "Блокнота" (Neon DB)
+// 🔴 === НОВА СТІЙКА ЛОГІКА "ПАМ'ЯТІ" (Neon DB) ===
 const dbClient = new pg.Pool({
   connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // Потрібно для Neon
+  ssl: { rejectUnauthorized: false }
 });
+
+// 🔴 Додаємо слухача помилок.
+// Якщо Neon "засне" і зв'язок обірветься, цей код спрацює,
+// але "мозок" НЕ "впаде", а просто запише помилку в лог.
+dbClient.on('error', (err) => {
+  console.error('❌ (Neon) ВТРАЧЕНО ЗВ\'ЯЗОК ІЗ "ПАМ\'ЯТТЮ"!', err.message);
+  // Ми не "падаємо". Наступний запит просто спробує підключитися знову.
+});
+
+// 🔴 Нова функція для "безпечного" запиту до бази
+async function queryDatabase(queryText, values) {
+  try {
+    const result = await dbClient.query(queryText, values);
+    return result;
+  } catch (err) {
+    console.error('❌ (Neon) Помилка запиту до бази:', err.message);
+    // Якщо зв'язок обірвався, ми отримаємо помилку тут, але "мозок" не "впаде".
+    throw err; // Кидаємо помилку, щоб код, який нас викликав, знав про неї
+  }
+}
+// === КІНЕЦЬ НОВОЇ ЛОГІКИ ===
 
 // --- СХОВИЩЕ ДАНИХ (в оперативній пам'яті) ---
 let cachedAlertString = ""; 
-let previousAlertStates = {}; // Стан "до цього"
-let dnaCounter = 107000; // Базовий лічильник
-let lastError = null; // 🔴 <-- ДОДАЙ ЦЕЙ РЯДОК
+let previousAlertStates = {}; 
+let dnaCounter = 107000; 
+let lastError = null; // 🔴 Повертаємо lastError
 
 // === ЛОГІКА СИМУЛЯЦІЇ (ТЕПЕР ЖИВЕ У "МОЗКУ") ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
@@ -38,7 +59,6 @@ const launchPoints = {
   'Crimea': { lon: 34.4, lat: 45.5, r: 0.5 },
   'Black_Sea': { lon: 32.0, lat: 46.0, r: 0.5 },
   'Caspian_Sea': { lon: 48.0, lat: 46.0, r: 0.5 }
-  // Білорусь виключена з Каталізатора
 };
 const targetNodes = {
   frontline: [{ lon: 37.5, lat: 49.8 }, { lon: 37.8, lat: 48.5 }, { lon: 35.8, lat: 47.5 }, { lon: 33.0, lat: 46.7 }],
@@ -57,11 +77,12 @@ const REGION_UIDS = {
 async function startServer() {
   // 1. ПІДКЛЮЧАЄМОСЬ ДО БАЗИ ДАНИХ
   try {
-    await dbClient.connect();
+    // 🔴 Використовуємо нову "безпечну" функцію
+    await queryDatabase('SELECT NOW()'); // Простий запит для перевірки з'єднання
     console.log('✅ (Neon) Успішно підключено до "Пам\'яті"');
     
     // 2. СТВОРЮЄМО ТАБЛИЦЮ (якщо її немає)
-    await dbClient.query(`
+    await queryDatabase(`
       CREATE TABLE IF NOT EXISTS scars (
         id SERIAL PRIMARY KEY,
         start_lon FLOAT,
@@ -74,13 +95,14 @@ async function startServer() {
     console.log('✅ (Neon) Таблиця "scars" готова.');
 
     // 3. РАХУЄМО, СКІЛЬКИ ШРАМІВ ВЖЕ Є В ПАМ'ЯТІ
-    const result = await dbClient.query('SELECT COUNT(*) FROM scars');
+    const result = await queryDatabase('SELECT COUNT(*) FROM scars');
     dnaCounter = 107000 + parseInt(result.rows[0].count);
     console.log(`✅ (Logic) Початковий лічильник шрамів: ${dnaCounter}`);
 
   } catch (err) {
     console.error('❌ ПОМИЛКА ПІДКЛЮЧЕННЯ ДО БАЗИ NEON:', err.message);
-    return; // Не запускаємо сервер, якщо "пам'ять" не працює
+    // Ми не будемо зупиняти сервер, але повідомимо про проблему
+    lastError = "ПОМИЛКА БАЗИ ДАНИХ";
   }
 
   // --- НАЛАШТУВАННЯ СЕРВЕРА (Express) ---
@@ -101,14 +123,13 @@ async function startServer() {
   // 2. Віддає ВСІ шрами з "Пам'яті" (Neon)
   app.get('/get-all-scars', async (req, res) => {
     try {
-      const result = await dbClient.query('SELECT start_lon, start_lat, end_lon, end_lat FROM scars ORDER BY id ASC');
-      // Віддаємо лічильник ТА масив шрамів
+      // 🔴 Використовуємо нову "безпечну" функцію
+      const result = await queryDatabase('SELECT start_lon, start_lat, end_lon, end_lat, created_at FROM scars ORDER BY id ASC');
       res.json({
         dnaCounter: dnaCounter,
         scars: result.rows 
       });
     } catch (err) {
-      console.error('❌ Помилка читання з Neon:', err.message);
       res.status(500).json({ error: 'Помилка "Пам\'яті"' });
     }
   });
@@ -117,13 +138,14 @@ async function startServer() {
   pollExternalApi(); // Перевіряємо API
   setInterval(pollExternalApi, POLLING_INTERVAL);
   
-nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
-simulateKabs(); // Запускаємо симуляцію КАБів
+  // 🔴 Виправлений запуск КАБів
+  nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
+  simulateKabs(); // Запускаємо симуляцію КАБів
 
   // --- ЗАПУСК СЕРВЕРА ---
   app.listen(PORT, () => {
     console.log(`=================================================`);
-    console.log(`Проєкт "Шрами" (v3.0 з Пам'яттю) запущено на http://localhost:${PORT}`);
+    console.log(`Проєкт "Шрами" (v3.1 Стійка) запущено на http://localhost:${PORT}`);
     console.log(`=================================================`);
   });
 }
@@ -137,7 +159,7 @@ async function pollExternalApi() {
       headers: { 'Authorization': 'Bearer ' + API_TOKEN }
     });
     cachedAlertString = response.data; 
-    lastError = null; 
+    lastError = null; // 🔴 Помилки API немає
     console.log(`Пульс (IoT): Отримано рядок статусу, довжина: ${cachedAlertString.length}`);
     
     // ОБРОБЛЯЄМО ТРИГЕРИ ПРЯМО ТУТ
@@ -146,7 +168,7 @@ async function pollExternalApi() {
   } catch (error) {
     if (error.response) console.error('Помилка API (IoT):', error.response.status);
     else console.error('Помилка (IoT):', error.message);
-    lastError = "Помилка API";
+    lastError = "Помилка API"; // 🔴 Помилка сталася
   }
 }
 
@@ -217,7 +239,6 @@ async function generateAndStoreScars(startKey, regionKey, amount) {
     newScars.push(start.lon, start.lat, end.lon, end.lat);
   }
 
-  // Створюємо ОДИН великий запит до бази даних
   const queryText = `INSERT INTO scars (start_lon, start_lat, end_lon, end_lat) VALUES ${
     new Array(amount).fill(0).map((_, i) => 
       `($${i*4+1}, $${i*4+2}, $${i*4+3}, $${i*4+4})`
@@ -225,11 +246,13 @@ async function generateAndStoreScars(startKey, regionKey, amount) {
   }`;
 
   try {
-    await dbClient.query(queryText, newScars);
+    // 🔴 Використовуємо нову "безпечну" функцію
+    await queryDatabase(queryText, newScars);
     dnaCounter += amount; // Збільшуємо лічильник
     console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів. Лічильник: ${dnaCounter}`);
   } catch (err) {
-    console.error('❌ Помилка запису в Neon:', err.message);
+    // Якщо зв'язок "заснув", ми просто не збережемо шрами, але "мозок" не "впаде"
+    console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
 }
 
