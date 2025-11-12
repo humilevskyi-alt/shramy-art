@@ -1,58 +1,48 @@
-// === server.js (Фінальна Стійка Версія v3.1 - Авто-реконнект до Neon) ===
+// === server.js (Фінальна Стійка Версія v3.2 - з "Живим" оновленням) ===
 
 import express from 'express'; 
 import axios from 'axios'; 
 import cors from 'cors'; 
-import pg from 'pg'; // "Драйвер" бази даних
+import pg from 'pg'; 
 
 // --- НАЛАШТУВАННЯ ---
 const app = express();
 const PORT = 3001; 
-const POLLING_INTERVAL = 15000; // 15 секунд
+const POLLING_INTERVAL = 15000; 
 
 // --- СЕКРЕТИ З RENDER ---
 const API_TOKEN = process.env.API_TOKEN;
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// 🔴 === НОВА СТІЙКА ЛОГІКА "ПАМ'ЯТІ" (Neon DB) ===
+// --- НАЛАШТУВАННЯ БАЗИ NEON ---
 const dbClient = new pg.Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
-
-// 🔴 Додаємо слухача помилок.
-// Якщо Neon "засне" і зв'язок обірветься, цей код спрацює,
-// але "мозок" НЕ "впаде", а просто запише помилку в лог.
 dbClient.on('error', (err) => {
   console.error('❌ (Neon) ВТРАЧЕНО ЗВ\'ЯЗОК ІЗ "ПАМ\'ЯТТЮ"!', err.message);
-  // Ми не "падаємо". Наступний запит просто спробує підключитися знову.
 });
-
-// 🔴 Нова функція для "безпечного" запиту до бази
 async function queryDatabase(queryText, values) {
   try {
     const result = await dbClient.query(queryText, values);
     return result;
   } catch (err) {
     console.error('❌ (Neon) Помилка запиту до бази:', err.message);
-    // Якщо зв'язок обірвався, ми отримаємо помилку тут, але "мозок" не "впаде".
-    throw err; // Кидаємо помилку, щоб код, який нас викликав, знав про неї
+    throw err; 
   }
 }
-// === КІНЕЦЬ НОВОЇ ЛОГІКИ ===
+// --- КІНЕЦЬ НАЛАШТУВАННЯ БАЗИ ---
 
 // --- СХОВИЩЕ ДАНИХ (в оперативній пам'яті) ---
 let cachedAlertString = ""; 
 let previousAlertStates = {}; 
 let dnaCounter = 107000; 
-let lastError = null; // 🔴 Повертаємо lastError
+let lastError = null; 
 
-// === ЛОГІКА СИМУЛЯЦІЇ (ТЕПЕР ЖИВЕ У "МОЗКУ") ===
+// === ЛОГІКА СИМУЛЯЦІЇ (без змін) ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
 let nextKabSalvoTime = 0; 
 const CATALYST_CHANCE = 6; // 6% шанс
-
-// Координати (ми маємо їх дублювати тут)
 const launchPoints = {
   'Belgorod_Bryansk': { lon: 36.5, lat: 50.5, r: 0.5 },
   'Primorsko_Akhtarsk': { lon: 38.1, lat: 46.0, r: 0.5 },
@@ -75,13 +65,9 @@ const REGION_UIDS = {
 
 // --- ГОЛОВНА ФУНКЦІЯ ЗАПУСКУ ---
 async function startServer() {
-  // 1. ПІДКЛЮЧАЄМОСЬ ДО БАЗИ ДАНИХ
   try {
-    // 🔴 Використовуємо нову "безпечну" функцію
-    await queryDatabase('SELECT NOW()'); // Простий запит для перевірки з'єднання
+    await queryDatabase('SELECT NOW()'); 
     console.log('✅ (Neon) Успішно підключено до "Пам\'яті"');
-    
-    // 2. СТВОРЮЄМО ТАБЛИЦЮ (якщо її немає)
     await queryDatabase(`
       CREATE TABLE IF NOT EXISTS scars (
         id SERIAL PRIMARY KEY,
@@ -93,15 +79,11 @@ async function startServer() {
       );
     `);
     console.log('✅ (Neon) Таблиця "scars" готова.');
-
-    // 3. РАХУЄМО, СКІЛЬКИ ШРАМІВ ВЖЕ Є В ПАМ'ЯТІ
     const result = await queryDatabase('SELECT COUNT(*) FROM scars');
     dnaCounter = 107000 + parseInt(result.rows[0].count);
     console.log(`✅ (Logic) Початковий лічильник шрамів: ${dnaCounter}`);
-
   } catch (err) {
     console.error('❌ ПОМИЛКА ПІДКЛЮЧЕННЯ ДО БАЗИ NEON:', err.message);
-    // Ми не будемо зупиняти сервер, але повідомимо про проблему
     lastError = "ПОМИЛКА БАЗИ ДАНИХ";
   }
 
@@ -123,8 +105,8 @@ async function startServer() {
   // 2. Віддає ВСІ шрами з "Пам'яті" (Neon)
   app.get('/get-all-scars', async (req, res) => {
     try {
-      // 🔴 Використовуємо нову "безпечну" функцію
-      const result = await queryDatabase('SELECT start_lon, start_lat, end_lon, end_lat, created_at FROM scars ORDER BY id ASC');
+      // 🔴 ВАЖЛИВО: Тепер ми також надсилаємо ID
+      const result = await queryDatabase('SELECT id, start_lon, start_lat, end_lon, end_lat, created_at FROM scars ORDER BY id ASC');
       res.json({
         dnaCounter: dnaCounter,
         scars: result.rows 
@@ -134,18 +116,39 @@ async function startServer() {
     }
   });
 
+  // 3. 🔴 === НОВИЙ МАРШРУТ ===
+  //    Віддає ТІЛЬКИ НОВІ шрами (новіші за той ID, що надіслав "Художник")
+  app.get('/get-new-scars', async (req, res) => {
+    // "Художник" питає: /get-new-scars?lastId=12
+    const lastId = parseInt(req.query.lastId) || 0; 
+    
+    try {
+      const result = await queryDatabase(
+        'SELECT id, start_lon, start_lat, end_lon, end_lat, created_at FROM scars WHERE id > $1 ORDER BY id ASC',
+        [lastId]
+      );
+      res.json({
+        dnaCounter: dnaCounter, // Надсилаємо оновлений лічильник
+        newScars: result.rows // Надсилаємо ТІЛЬКИ нові
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Помилка "Пам\'яті"' });
+    }
+  });
+  // === КІНЕЦЬ НОВОГО МАРШРУТУ ===
+
+
   // --- ЗАПУСК ФОНОВИХ ПРОЦЕСІВ (КАБи ТА API) ---
-  pollExternalApi(); // Перевіряємо API
+  pollExternalApi(); 
   setInterval(pollExternalApi, POLLING_INTERVAL);
   
-  // 🔴 Виправлений запуск КАБів
   nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
-  simulateKabs(); // Запускаємо симуляцію КАБів
+  simulateKabs(); 
 
   // --- ЗАПУСК СЕРВЕРА ---
   app.listen(PORT, () => {
     console.log(`=================================================`);
-    console.log(`Проєкт "Шрами" (v3.1 Стійка) запущено на http://localhost:${PORT}`);
+    console.log(`Проєкт "Шрами" (v3.2 "Живий") запущено на http://localhost:${PORT}`);
     console.log(`=================================================`);
   });
 }
@@ -159,16 +162,13 @@ async function pollExternalApi() {
       headers: { 'Authorization': 'Bearer ' + API_TOKEN }
     });
     cachedAlertString = response.data; 
-    lastError = null; // 🔴 Помилки API немає
+    lastError = null; 
     console.log(`Пульс (IoT): Отримано рядок статусу, довжина: ${cachedAlertString.length}`);
-    
-    // ОБРОБЛЯЄМО ТРИГЕРИ ПРЯМО ТУТ
     processAlertString(cachedAlertString);
-
   } catch (error) {
     if (error.response) console.error('Помилка API (IoT):', error.response.status);
     else console.error('Помилка (IoT):', error.message);
-    lastError = "Помилка API"; // 🔴 Помилка сталася
+    lastError = "Помилка API"; 
   }
 }
 
@@ -178,28 +178,20 @@ async function simulateKabs() {
   if (now > nextKabSalvoTime) {
     console.log(`--- СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
     let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
-    
-    // Генеруємо та ЗБЕРІГАЄМО шрами
     await generateAndStoreScars('Belgorod_Bryansk', 'frontline', salvoSize);
-
-    // Встановлюємо новий час
     let nextInterval = KAB_TIMER_AVG_INTERVAL + (Math.random() - 0.5) * 3600000; // +/- 30 хв
     nextKabSalvoTime = now + nextInterval;
   }
-  
-  // Перевіряємо знову через хвилину
   setTimeout(simulateKabs, 60000); 
 }
 
 // 3. ОБРОБКА ТРИВОГ (Каталізатор)
 function processAlertString(alertString) {
   if (!alertString || alertString.length < 50) return; 
-
   for (const regionKey in REGION_UIDS) {
     const uids = REGION_UIDS[regionKey]; 
     let isRegionCurrentlyActive = uids.some(uid => alertString.charAt(uid) === 'A');
     let wasRegionActive = previousAlertStates[regionKey] || false;
-
     if (isRegionCurrentlyActive && !wasRegionActive) {
       console.log(`!!! КАТАЛІЗАТОР: НОВА ТРИВОГА в ${regionKey.toUpperCase()}`);
       triggerCatalystSalvo(regionKey); // Кидаємо кубик
@@ -214,10 +206,7 @@ async function triggerCatalystSalvo(regionKey) {
     console.log(`!!! УСПІХ (6%): Запускаємо симуляцію для ${regionKey.toUpperCase()}`);
     let salvoSize = Math.floor(Math.random() * (140 - 100) + 100); // 100-140
     let startKey = ['Belgorod_Bryansk', 'Primorsko_Akhtarsk', 'Crimea', 'Black_Sea', 'Caspian_Sea'][Math.floor(Math.random() * 5)];
-    
-    // Генеруємо та ЗБЕРІГАЄМО шрами
     await generateAndStoreScars(startKey, regionKey, salvoSize);
-
   } else {
     console.log(`--- (94%): "Кубик" не випав для ${regionKey.toUpperCase()}`);
   }
@@ -231,11 +220,9 @@ async function generateAndStoreScars(startKey, regionKey, amount) {
 
   let newScars = [];
   for (let i = 0; i < amount; i++) {
-    // Генеруємо координати (чиста математика, без p5.js)
     let start = { lon: startCluster.lon + (Math.random() - 0.5) * startCluster.r * 2, lat: startCluster.lat + (Math.random() - 0.5) * startCluster.r * 2 };
     let endTarget = targetGroup[Math.floor(Math.random() * targetGroup.length)];
-    let end = { lon: endTarget.lon + (Math.random() - 0.5) * 0.2, lat: endTarget.lat + (Math.random() - 0.5) * 0.2 }; // Маленький розкид
-    
+    let end = { lon: endTarget.lon + (Math.random() - 0.5) * 0.2, lat: endTarget.lat + (Math.random() - 0.5) * 0.2 }; 
     newScars.push(start.lon, start.lat, end.lon, end.lat);
   }
 
@@ -246,12 +233,10 @@ async function generateAndStoreScars(startKey, regionKey, amount) {
   }`;
 
   try {
-    // 🔴 Використовуємо нову "безпечну" функцію
     await queryDatabase(queryText, newScars);
     dnaCounter += amount; // Збільшуємо лічильник
     console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів. Лічильник: ${dnaCounter}`);
   } catch (err) {
-    // Якщо зв'язок "заснув", ми просто не збережемо шрами, але "мозок" не "впаде"
     console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
 }

@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v3.0 - "Живі" + "Запечені") ===
+// === sketch.js (Фінальна Версія v3.2 - "Живе" Оновлення) ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -7,7 +7,8 @@ let allCities = [];
 let staticMapBuffer; 
 let scarColors = []; 
 let dnaCounter = 107000; 
-let liveAttacks = []; // 🔴 ПОВЕРТАЄМО "ЖИВІ" АТАКИ
+let liveAttacks = []; // "Живі" атаки
+let lastKnownScarId = 0; // 🔴 ID ОСТАННЬОГО ШРАМУ, ЯКИЙ МИ БАЧИЛИ
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -51,14 +52,18 @@ function setup() {
   // 3. Запускаємо "пульс" годинника (питає ТІЛЬКИ статус)
   checkAlertStatus(); 
   setInterval(checkAlertStatus, 10000); 
+  
+  // 4. 🔴 === НОВИЙ ТАЙМЕР ===
+  //    Запускаємо "пульс" шрамів (питає про НОВІ шрами)
+  setInterval(checkForNewScars, 30000); // Кожні 30 секунд
 }
 
-// --- ГОЛОВНИЙ ЦИКЛ DRAW (🔴 ОНОВЛЕНИЙ) ---
+// --- ГОЛОВНИЙ ЦИКЛ DRAW (ОНОВЛЕНИЙ) ---
 function draw() {
   // 1. Малюємо наш готовий буфер (тільки СТАРІ шрами)
   image(staticMapBuffer, 0, 0);
 
-  // 2. 🔴 МАЛЮЄМО "ЖИВІ" ЛІНІЇ (НОВІ шрами, молодші 24 год)
+  // 2. МАЛЮЄМО "ЖИВІ" ЛІНІЇ (НОВІ шрами, молодші 24 год)
   let realCurrentTime = new Date();
   for (let i = liveAttacks.length - 1; i >= 0; i--) {
     let attack = liveAttacks[i];
@@ -82,7 +87,7 @@ function draw() {
 
 // === НОВІ ФУНКЦІЇ "ХУДОЖНИКА" ===
 
-// 1. 🔴 ОНОВЛЕНО: Запитує ВСІ шрами і СОРТУЄ їх
+// 1. ОНОВЛЕНО: Запитує ВСІ шрами і СОРТУЄ їх
 async function loadAllScarsFromServer() {
   try {
     const response = await fetch('/get-all-scars');
@@ -111,11 +116,16 @@ async function loadAllScarsFromServer() {
         liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scarTime)));
         liveCount++;
       }
+      
+      // 🔴 Запам'ятовуємо ID останнього шраму
+      if (scar.id > lastKnownScarId) {
+        lastKnownScarId = scar.id;
+      }
     }
     
-    // Лічильник = 107000 (база) + ВСІ шрами з "Пам'яті"
-    dnaCounter = 107000 + data.scars.length; 
-    console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} зараз "в ефірі".`);
+    // Встановлюємо ПРАВИЛЬНИЙ лічильник (беремо з сервера)
+    dnaCounter = data.dnaCounter; 
+    console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
 
   } catch (err) {
     console.error('Помилка завантаження шрамів з /get-all-scars:', err.message);
@@ -138,14 +148,47 @@ function checkAlertStatus() {
   });
 }
 
-// === ФУНКЦІЇ МАЛЮВАННЯ ===
+// 3. 🔴 === НОВА ФУНКЦІЯ: Перевірка НОВИХ шрамів ===
+async function checkForNewScars() {
+  try {
+    // Питаємо "мозок": "Чи є щось нове після ID [lastKnownScarId]?"
+    const response = await fetch(`/get-new-scars?lastId=${lastKnownScarId}`);
+    const data = await response.json();
+    
+    if (data.error) throw new Error(data.error);
 
-// Малює ОДИН шрам на буфер (використовує p5)
+    if (data.newScars.length > 0) {
+      console.log(`✅ (Live) Отримано ${data.newScars.length} НОВИХ шрамів!`);
+      
+      // Додаємо нові шрами в "живий" ефір
+      for (const scar of data.newScars) {
+        let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
+        let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
+        liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scar.created_at)));
+        
+        // Оновлюємо останній ID
+        if (scar.id > lastKnownScarId) {
+          lastKnownScarId = scar.id;
+        }
+      }
+    }
+    
+    // Оновлюємо лічильник (навіть якщо нових шрамів 0,
+    // лічильник на сервері міг змінитися)
+    dnaCounter = data.dnaCounter;
+
+  } catch (err) {
+    console.error('Помилка завантаження НОВИХ шрамів:', err.message);
+  }
+}
+// === КІНЕЦЬ НОВОЇ ФУНКЦІЇ ===
+
+
+// === ФУНКЦІЇ МАЛЮВАННЯ (без змін) ===
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
   staticMapBuffer.strokeWeight(random(0.5, 1.5)); 
-  
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
   let dist = p5.Vector.dist(start, end);
@@ -157,14 +200,10 @@ function drawScarToBuffer(start, end) {
   staticMapBuffer.bezierVertex(cp1_x, cp1_y, cp2_x, cp2_y, end.x, end.y);
   staticMapBuffer.endShape();
 }
-
-// (Виправлена версія з трикутниками)
 function buildStaticDNA() {
   randomSeed(99);
   staticMapBuffer.background(10, 10, 20);
   if (!citiesData) { console.error('ПОМИЛКА: cities.json!'); return; }
-  
-  // 1. Завантажуємо координати міст
   let regions = citiesData[0].regions;
   for (let region of regions) {
     for (let city of region.cities) {
@@ -174,8 +213,6 @@ function buildStaticDNA() {
       allCities.push({ name: city.name, pos: mapWithAspectRatio(lon, lat), lon: lon, lat: lat });
     }
   }
-  
-  // 2. Завантажуємо координати кластерів запуску
   let createLaunchCluster = (lon, lat, count, radius) => {
     let cluster = [];
     for (let i = 0; i < count; i++) {
@@ -189,11 +226,7 @@ function buildStaticDNA() {
   launchPoints['Black_Sea'] = createLaunchCluster(32.0, 46.0, 10, 0.5); 
   launchPoints['Caspian_Sea'] = createLaunchCluster(48.0, 46.0, 10, 0.5); 
   launchPoints['Belarus'] = createLaunchCluster(28.0, 52.2, 5, 0.5); 
-    
-  // 3. Малюємо 107,000 БАЗОВИХ шрамів (СПОЧАТКУ)
   console.log('Генерація "DNA" (107,000 шрамів)...');
-  
-  // (Нам потрібні цілі для генерації, але ми їх не зберігаємо)
   let tempTargetNodes = {
     frontline: generateFrontlinePoints(300),
     kyiv: [mapWithAspectRatio(30.52, 50.45)],
@@ -201,7 +234,6 @@ function buildStaticDNA() {
     central: [mapWithAspectRatio(28.68, 48.29), mapWithAspectRatio(32.26, 48.45), mapWithAspectRatio(28.46, 49.23)],
     western: [mapWithAspectRatio(24.02, 49.83), mapWithAspectRatio(25.59, 49.55), mapWithAspectRatio(24.71, 48.92)]
   };
-  
   for (let i = 0; i < TOTAL_SCARS; i++) {
     let r = random(1); 
     let targetNode;
@@ -210,7 +242,6 @@ function buildStaticDNA() {
     else if (r < 0.90) { targetNode = random(tempTargetNodes.southern); }
     else if (r < 0.985) { targetNode = random(tempTargetNodes.central); }
     else { targetNode = random(tempTargetNodes.western); }
-    
     r = random(1);
     let startCluster;
     if (r < 0.47) { startCluster = launchPoints['Belgorod_Bryansk']; }
@@ -219,14 +250,11 @@ function buildStaticDNA() {
     else if (r < 0.96) { startCluster = launchPoints['Belarus']; }
     else if (r < 0.98) { startCluster = launchPoints['Caspian_Sea']; }
     else { startCluster = launchPoints['Black_Sea']; }
-    
     let startPoint = random(startCluster);
     drawScarToBuffer(startPoint, targetNode);
   }
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
-
-  // 4. Малюємо МІСТА (ПОВЕРХ шрамів)
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
@@ -242,8 +270,6 @@ function buildStaticDNA() {
       staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
     }
   }
-  
-  // 5. Малюємо ТРИКУТНИКИ (ОСТАННІМИ, поверх усього)
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
@@ -258,8 +284,6 @@ function buildStaticDNA() {
   }
   console.log('Буфер "DNA" (Міста та Трикутники) готовий.');
 }
-
-// Функції-помічники (потрібні для `buildStaticDNA`)
 function mapWithAspectRatio(lon, lat) {
   let mapRatio = (bounds.maxLon - bounds.minLon) / (bounds.maxLat - bounds.minLat);
   let canvasRatio = width / height;
