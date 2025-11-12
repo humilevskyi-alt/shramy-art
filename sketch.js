@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v3.2 - "Живе" Оновлення) ===
+// === sketch.js (Фінальна Версія v4.0 - "Живий" + "Чистий Годинник") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -8,7 +8,7 @@ let staticMapBuffer;
 let scarColors = []; 
 let dnaCounter = 107000; 
 let liveAttacks = []; // "Живі" атаки
-let lastKnownScarId = 0; // 🔴 ID ОСТАННЬОГО ШРАМУ, ЯКИЙ МИ БАЧИЛИ
+let lastKnownScarId = 0; // ID ОСТАННЬОГО ШРАМУ
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -22,6 +22,11 @@ let w, h;
 
 // --- ГОДИННИК ТА СТАТУС ---
 let currentAlertStatus = { isActive: false, type: "ОЧІКУВАННЯ", error: null };
+// 🔴 Всі 24 "чисті" області (для годинника)
+const REGION_UIDS_TO_WATCH = [
+  31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
+  21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
+];
 
 // --- ЗАВАНТАЖЕННЯ ---
 function preload() {
@@ -53,12 +58,11 @@ function setup() {
   checkAlertStatus(); 
   setInterval(checkAlertStatus, 10000); 
   
-  // 4. 🔴 === НОВИЙ ТАЙМЕР ===
-  //    Запускаємо "пульс" шрамів (питає про НОВІ шрами)
+  // 4. Запускаємо "пульс" шрамів (питає про НОВІ шрами)
   setInterval(checkForNewScars, 30000); // Кожні 30 секунд
 }
 
-// --- ГОЛОВНИЙ ЦИКЛ DRAW (ОНОВЛЕНИЙ) ---
+// --- ГОЛОВНИЙ ЦИКЛ DRAW ---
 function draw() {
   // 1. Малюємо наш готовий буфер (тільки СТАРІ шрами)
   image(staticMapBuffer, 0, 0);
@@ -70,29 +74,25 @@ function draw() {
 
     // isExpired() перевіряє, чи пройшло 24 години з моменту СТВОРЕННЯ
     if (attack.isExpired(realCurrentTime)) {
-      // Атака "померла" (пройшло 24 години)
-      // Ми її "запікаємо", щоб вона стала частиною DNA
       drawScarToBuffer(attack.start, attack.end); // Малюємо в буфер
       liveAttacks.splice(i, 1); // Видаляємо з "живих"
       continue; 
     }
-
-    attack.update(); // Оновлюємо анімацію польоту
-    attack.display(); // Малює червону лінію
+    attack.update(); 
+    attack.display(); 
   }
 
   // 3. Малюємо годинник та фільтр
   drawUpdatedClock(realCurrentTime);
 }
 
-// === НОВІ ФУНКЦІЇ "ХУДОЖНИКА" ===
+// === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
 
-// 1. ОНОВЛЕНО: Запитує ВСІ шрами і СОРТУЄ їх
+// 1. Запитує ВСІ збережені шрами ОДИН РАЗ при завантаженні
 async function loadAllScarsFromServer() {
   try {
     const response = await fetch('/get-all-scars');
     const data = await response.json();
-    
     if (data.error) throw new Error(data.error);
 
     const now = new Date().getTime();
@@ -108,7 +108,6 @@ async function loadAllScarsFromServer() {
 
       // Перевіряємо, чи шрам СТАРШИЙ за 24 години
       if ((now - scarTime) > hours24) {
-        // СТАРИЙ: "Запікаємо" його в DNA
         drawScarToBuffer(startVec, endVec);
         bakedCount++;
       } else {
@@ -116,14 +115,10 @@ async function loadAllScarsFromServer() {
         liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scarTime)));
         liveCount++;
       }
-      
-      // 🔴 Запам'ятовуємо ID останнього шраму
       if (scar.id > lastKnownScarId) {
         lastKnownScarId = scar.id;
       }
     }
-    
-    // Встановлюємо ПРАВИЛЬНИЙ лічильник (беремо з сервера)
     dnaCounter = data.dnaCounter; 
     console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
 
@@ -148,13 +143,11 @@ function checkAlertStatus() {
   });
 }
 
-// 3. 🔴 === НОВА ФУНКЦІЯ: Перевірка НОВИХ шрамів ===
+// 3. Перевірка НОВИХ шрамів (кожні 30 сек)
 async function checkForNewScars() {
   try {
-    // Питаємо "мозок": "Чи є щось нове після ID [lastKnownScarId]?"
     const response = await fetch(`/get-new-scars?lastId=${lastKnownScarId}`);
     const data = await response.json();
-    
     if (data.error) throw new Error(data.error);
 
     if (data.newScars.length > 0) {
@@ -165,26 +158,20 @@ async function checkForNewScars() {
         let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
         let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
         liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scar.created_at)));
-        
-        // Оновлюємо останній ID
         if (scar.id > lastKnownScarId) {
           lastKnownScarId = scar.id;
         }
       }
     }
-    
-    // Оновлюємо лічильник (навіть якщо нових шрамів 0,
-    // лічильник на сервері міг змінитися)
     dnaCounter = data.dnaCounter;
-
   } catch (err) {
     console.error('Помилка завантаження НОВИХ шрамів:', err.message);
   }
 }
-// === КІНЕЦЬ НОВОЇ ФУНКЦІЇ ===
+// === КІНЕЦЬ ЗАПИТІВ ===
 
 
-// === ФУНКЦІЇ МАЛЮВАННЯ (без змін) ===
+// === ФУНКЦІЇ МАЛЮВАННЯ ===
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
@@ -320,7 +307,7 @@ function generateFrontlinePoints(numPoints) {
   return frontlineNodes;
 }
 
-// === ГОДИННИК (без змін) ===
+// === 🔴 ГОДИННИК З ВИПРАВЛЕНОЮ ЛОГІКОЮ "ВІЧНОЇ ТРИВОГИ" ===
 function updateAlertStatus(alertString, errorMsg) {
   currentAlertStatus.error = errorMsg; 
   if (errorMsg) {
@@ -328,7 +315,19 @@ function updateAlertStatus(alertString, errorMsg) {
     currentAlertStatus.type = errorMsg;
     return;
   }
-  if (alertString && alertString.includes('A')) {
+  
+  // Перевіряємо, чи є 'A' (Тривога) ТІЛЬКИ у "чистих" областях
+  let isAnyCleanAlertActive = false;
+  if (alertString) {
+    for (const uid of REGION_UIDS_TO_WATCH) {
+      if (alertString.charAt(uid) === 'A') {
+        isAnyCleanAlertActive = true;
+        break; // Знайшли, далі можна не шукати
+      }
+    }
+  }
+
+  if (isAnyCleanAlertActive) {
     currentAlertStatus.isActive = true;
     currentAlertStatus.type = "АКТИВНА ФАЗА"; 
   } else {
@@ -370,28 +369,24 @@ function drawUpdatedClock(realTime) {
     text(`ПОМИЛКА: ${typeText}`, 10, 70);
   } else {
     fill(255); 
-    text(`СТАН: ${typeText}`, 10, 70);
+    text(`СТАН: ${typeText}`, 10, 70); // 🔴 Це той рядок, що дублюється
   }
   fill(255); 
   text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 100);
 }
 
-// 🔴 === ПОВЕРТАЄМО КЛАС LIVEFLIGHT ===
+// === КЛАС LIVEFLIGHT (без змін) ===
 class LiveFlight {
   constructor(startVector, endVector, simulationStartTime) {
     this.start = startVector;
     this.end = endVector;
-    this.simulationStartTime = simulationStartTime; // ЗБЕРІГАЄМО ЧАС СТВОРЕННЯ
-    
+    this.simulationStartTime = simulationStartTime; 
     this.speed = 0.005; 
     this.weight = random(1.5, 1.5); 
-    this.color = color(255, 0, 0, 220); // Завжди червоний
-
+    this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
     this.progressTail = 0; 
     this.tailLength = 1; 
-
-    // Генеруємо криву (p5)
     let dist = p5.Vector.dist(this.start, this.end);
     let bendFactor = dist * 0.5;
     this.cp1_x = lerp(this.start.x, this.end.x, 0.1) + random(-bendFactor, bendFactor);
@@ -399,30 +394,20 @@ class LiveFlight {
     this.cp2_x = lerp(this.start.x, this.end.x, 0.7) + random(-bendFactor, bendFactor);
     this.cp2_y = lerp(this.start.y, this.end.y, 0.7) + random(-bendFactor, bendFactor);
   }
-
   update() {
-    // Ця логіка тепер імітує "стирання"
-    // "Голова" летить вперед, ПОКИ НЕ ДОСЯГНЕ 1.0
-    if (this.progressHead < 1.0) {
-      this.progressHead += this.speed;
-    } else {
-      this.progressHead = 1.0;
-    }
-    // "Хвіст" летить за нею
+    if (this.progressHead < 1.0) { this.progressHead += this.speed; }
+    else { this.progressHead = 1.0; }
     this.progressTail = max(0, this.progressHead - this.tailLength);
-    // Коли "голова" долетіла, "хвіст" її наздоганяє
     if (this.progressHead >= 1.0) {
       this.progressTail += this.speed; 
       this.progressTail = min(this.progressTail, 1.0); 
     }
   }
-
   display() {
     stroke(this.color);
     strokeWeight(this.weight);
     noFill();
     beginShape();
-    // Малюємо від хвоста до голови
     for (let t = this.progressTail; t < this.progressHead; t += 0.01) { 
       let x = bezierPoint(this.start.x, this.cp1_x, this.cp2_x, this.end.x, t);
       let y = bezierPoint(this.start.y, this.cp1_y, this.cp2_y, this.end.y, t);
@@ -433,8 +418,6 @@ class LiveFlight {
     vertex(headX, headY);
     endShape();
   }
-
-  // Перевіряє, чи пройшло 24 години з моменту СТВОРЕННЯ
   isExpired(currentSimTime) {
     const hours24 = 24 * 60 * 60 * 1000; 
     let expiryTime = new Date(this.simulationStartTime.getTime() + hours24);

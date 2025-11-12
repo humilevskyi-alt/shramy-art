@@ -1,4 +1,4 @@
-// === server.js (Фінальна Стійка Версія v3.2 - з "Живим" оновленням) ===
+// === server.js (Фінальна Версія v4.0 - Повний "Каталізатор") ===
 
 import express from 'express'; 
 import axios from 'axios'; 
@@ -35,14 +35,25 @@ async function queryDatabase(queryText, values) {
 
 // --- СХОВИЩЕ ДАНИХ (в оперативній пам'яті) ---
 let cachedAlertString = ""; 
-let previousAlertStates = {}; 
+let previousAlertStates = {}; // Стан "до цього"
 let dnaCounter = 107000; 
 let lastError = null; 
 
-// === ЛОГІКА СИМУЛЯЦІЇ (без змін) ===
+// === ЛОГІКА СИМУЛЯЦІЇ (ТЕПЕР ЖИВЕ У "МОЗКУ") ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
 let nextKabSalvoTime = 0; 
 const CATALYST_CHANCE = 6; // 6% шанс
+
+// 🔴 === НОВА ЛОГІКА "КАТАЛІЗАТОРА" ===
+
+// 1. Всі 24 "чисті" області, які ми відстежуємо
+// (всі, окрім 16(Луг), 28(Дон), 29(Крим), 30(Севаст))
+const REGION_UIDS_TO_WATCH = [
+  31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
+  21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
+];
+
+// 2. Координати запуску
 const launchPoints = {
   'Belgorod_Bryansk': { lon: 36.5, lat: 50.5, r: 0.5 },
   'Primorsko_Akhtarsk': { lon: 38.1, lat: 46.0, r: 0.5 },
@@ -50,15 +61,14 @@ const launchPoints = {
   'Black_Sea': { lon: 32.0, lat: 46.0, r: 0.5 },
   'Caspian_Sea': { lon: 48.0, lat: 46.0, r: 0.5 }
 };
+
+// 3. Координати цілей
 const targetNodes = {
   frontline: [{ lon: 37.5, lat: 49.8 }, { lon: 37.8, lat: 48.5 }, { lon: 35.8, lat: 47.5 }, { lon: 33.0, lat: 46.7 }],
   kyiv: [{ lon: 30.52, lat: 50.45 }],
   southern: [{ lon: 30.72, lat: 46.48 }, { lon: 31.99, lat: 46.97 }],
   central: [{ lon: 28.68, lat: 48.29 }, { lon: 32.26, lat: 48.45 }, { lon: 28.46, lat: 49.23 }],
   western: [{ lon: 24.02, lat: 49.83 }, { lon: 25.59, lat: 49.55 }, { lon: 24.71, lat: 48.92 }]
-};
-const REGION_UIDS = {
-  kyiv: [31], southern: [17, 18], western: [27, 13, 21], central: [36, 15, 24, 10]
 };
 // === КІНЕЦЬ ЛОГІКИ СИМУЛЯЦІЇ ===
 
@@ -82,14 +92,23 @@ async function startServer() {
     const result = await queryDatabase('SELECT COUNT(*) FROM scars');
     dnaCounter = 107000 + parseInt(result.rows[0].count);
     console.log(`✅ (Logic) Початковий лічильник шрамів: ${dnaCounter}`);
+    
+    // Ініціалізуємо "попередній стан" для всіх 24 областей
+    const apiResponse = await axios.get('https://api.alerts.in.ua/v1/iot/active_air_raid_alerts.json', { headers: { 'Authorization': 'Bearer ' + API_TOKEN }});
+    cachedAlertString = apiResponse.data;
+    for (const uid of REGION_UIDS_TO_WATCH) {
+      previousAlertStates[uid] = (cachedAlertString.charAt(uid) === 'A');
+    }
+    console.log('✅ (Logic) "Каталізатор" ініціалізовано. Відстежуємо 24 області.');
+
   } catch (err) {
-    console.error('❌ ПОМИЛКА ПІДКЛЮЧЕННЯ ДО БАЗИ NEON:', err.message);
-    lastError = "ПОМИЛКА БАЗИ ДАНИХ";
+    console.error('❌ ПОМИЛКА ПІДКЛЮЧЕННЯ (API або NEON):', err.message);
+    lastError = "ПОМИЛКА БАЗИ ДАНИХ АБО API";
   }
 
   // --- НАЛАШТУВАННЯ СЕРВЕРА (Express) ---
   app.use(cors()); 
-  app.use(express.static('.')); // Віддаємо index.html та sketch.js
+  app.use(express.static('.')); 
 
   // --- API МАРШРУТИ ДЛЯ "ХУДОЖНИКА" ---
   
@@ -105,7 +124,6 @@ async function startServer() {
   // 2. Віддає ВСІ шрами з "Пам'яті" (Neon)
   app.get('/get-all-scars', async (req, res) => {
     try {
-      // 🔴 ВАЖЛИВО: Тепер ми також надсилаємо ID
       const result = await queryDatabase('SELECT id, start_lon, start_lat, end_lon, end_lat, created_at FROM scars ORDER BY id ASC');
       res.json({
         dnaCounter: dnaCounter,
@@ -116,39 +134,33 @@ async function startServer() {
     }
   });
 
-  // 3. 🔴 === НОВИЙ МАРШРУТ ===
-  //    Віддає ТІЛЬКИ НОВІ шрами (новіші за той ID, що надіслав "Художник")
+  // 3. Віддає ТІЛЬКИ НОВІ шрами
   app.get('/get-new-scars', async (req, res) => {
-    // "Художник" питає: /get-new-scars?lastId=12
     const lastId = parseInt(req.query.lastId) || 0; 
-    
     try {
       const result = await queryDatabase(
         'SELECT id, start_lon, start_lat, end_lon, end_lat, created_at FROM scars WHERE id > $1 ORDER BY id ASC',
         [lastId]
       );
       res.json({
-        dnaCounter: dnaCounter, // Надсилаємо оновлений лічильник
-        newScars: result.rows // Надсилаємо ТІЛЬКИ нові
+        dnaCounter: dnaCounter, 
+        newScars: result.rows 
       });
     } catch (err) {
       res.status(500).json({ error: 'Помилка "Пам\'яті"' });
     }
   });
-  // === КІНЕЦЬ НОВОГО МАРШРУТУ ===
-
 
   // --- ЗАПУСК ФОНОВИХ ПРОЦЕСІВ (КАБи ТА API) ---
-  pollExternalApi(); 
-  setInterval(pollExternalApi, POLLING_INTERVAL);
+  setInterval(pollExternalApi, POLLING_INTERVAL); // Перевіряємо API
   
   nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
-  simulateKabs(); 
+  simulateKabs(); // Запускаємо симуляцію КАБів
 
   // --- ЗАПУСК СЕРВЕРА ---
   app.listen(PORT, () => {
     console.log(`=================================================`);
-    console.log(`Проєкт "Шрами" (v3.2 "Живий") запущено на http://localhost:${PORT}`);
+    console.log(`Проєкт "Шрами" (v4.0 Фінальна) запущено на http://localhost:${PORT}`);
     console.log(`=================================================`);
   });
 }
@@ -164,7 +176,10 @@ async function pollExternalApi() {
     cachedAlertString = response.data; 
     lastError = null; 
     console.log(`Пульс (IoT): Отримано рядок статусу, довжина: ${cachedAlertString.length}`);
+    
+    // 🔴 ОБРОБЛЯЄМО ТРИГЕРИ (НОВА ЛОГІКА)
     processAlertString(cachedAlertString);
+
   } catch (error) {
     if (error.response) console.error('Помилка API (IoT):', error.response.status);
     else console.error('Помилка (IoT):', error.message);
@@ -176,7 +191,7 @@ async function pollExternalApi() {
 async function simulateKabs() {
   let now = Date.now();
   if (now > nextKabSalvoTime) {
-    console.log(`--- СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
+    console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
     let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
     await generateAndStoreScars('Belgorod_Bryansk', 'frontline', salvoSize);
     let nextInterval = KAB_TIMER_AVG_INTERVAL + (Math.random() - 0.5) * 3600000; // +/- 30 хв
@@ -185,30 +200,55 @@ async function simulateKabs() {
   setTimeout(simulateKabs, 60000); 
 }
 
-// 3. ОБРОБКА ТРИВОГ (Каталізатор)
+// 3. 🔴 ОБРОБКА ТРИВОГ (НОВА ЛОГІКА: 24 області)
 function processAlertString(alertString) {
   if (!alertString || alertString.length < 50) return; 
-  for (const regionKey in REGION_UIDS) {
-    const uids = REGION_UIDS[regionKey]; 
-    let isRegionCurrentlyActive = uids.some(uid => alertString.charAt(uid) === 'A');
-    let wasRegionActive = previousAlertStates[regionKey] || false;
+
+  // Перебираємо КОЖНУ з 24 "чистих" областей
+  for (const uid of REGION_UIDS_TO_WATCH) {
+    let isRegionCurrentlyActive = (alertString.charAt(uid) === 'A');
+    let wasRegionActive = previousAlertStates[uid] || false; // (H=false, A=true)
+
+    // Якщо H -> A, це "подія"
     if (isRegionCurrentlyActive && !wasRegionActive) {
-      console.log(`!!! КАТАЛІЗАТОР: НОВА ТРИВОГА в ${regionKey.toUpperCase()}`);
-      triggerCatalystSalvo(regionKey); // Кидаємо кубик
+      console.log(`!!! (Двигун Б) КАТАЛІЗАТОР: НОВА ТРИВОГА в UID: ${uid}`);
+      triggerCatalystRolls(); // Кидаємо кубик
     }
-    previousAlertStates[regionKey] = isRegionCurrentlyActive;
+    
+    // Оновлюємо "попередній" стан
+    previousAlertStates[uid] = isRegionCurrentlyActive;
   }
 }
 
-// 4. КИДОК КУБИКА (6% шанс)
-async function triggerCatalystSalvo(regionKey) {
+// 4. 🔴 КИДОК КУБИКА №1 (6% шанс)
+async function triggerCatalystRolls() {
   if (Math.random() * 100 < CATALYST_CHANCE) {
-    console.log(`!!! УСПІХ (6%): Запускаємо симуляцію для ${regionKey.toUpperCase()}`);
+    // УСПІХ! Це "бойова" подія.
+    
+    // Кидаємо кубик №2 (Розподіл)
+    const r = Math.random() * 100;
+    let targetKey;
+
+    // (5/5/8.5/1.5) -> (25 / 25 / 42.5 / 7.5)
+    if (r < 25.0) { // 25%
+      targetKey = 'kyiv';
+    } else if (r < 50.0) { // 25%
+      targetKey = 'southern';
+    } else if (r < 92.5) { // 42.5%
+      targetKey = 'central';
+    } else { // 7.5%
+      targetKey = 'western';
+    }
+
+    console.log(`!!! (Двигун Б) УСПІХ (6%): Кидок №2 -> Ціль: ${targetKey.toUpperCase()}`);
     let salvoSize = Math.floor(Math.random() * (140 - 100) + 100); // 100-140
     let startKey = ['Belgorod_Bryansk', 'Primorsko_Akhtarsk', 'Crimea', 'Black_Sea', 'Caspian_Sea'][Math.floor(Math.random() * 5)];
-    await generateAndStoreScars(startKey, regionKey, salvoSize);
+    
+    // Генеруємо та ЗБЕРІГАЄМО шрами
+    await generateAndStoreScars(startKey, targetKey, salvoSize);
+
   } else {
-    console.log(`--- (94%): "Кубик" не випав для ${regionKey.toUpperCase()}`);
+    console.log(`--- (Двигун Б) (94%): "Кубик" не випав (хибна тривога).`);
   }
 }
 
@@ -220,6 +260,7 @@ async function generateAndStoreScars(startKey, regionKey, amount) {
 
   let newScars = [];
   for (let i = 0; i < amount; i++) {
+    // Генеруємо координати
     let start = { lon: startCluster.lon + (Math.random() - 0.5) * startCluster.r * 2, lat: startCluster.lat + (Math.random() - 0.5) * startCluster.r * 2 };
     let endTarget = targetGroup[Math.floor(Math.random() * targetGroup.length)];
     let end = { lon: endTarget.lon + (Math.random() - 0.5) * 0.2, lat: endTarget.lat + (Math.random() - 0.5) * 0.2 }; 
