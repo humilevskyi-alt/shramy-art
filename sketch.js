@@ -1,12 +1,13 @@
-// === sketch.js (Фінальна Версія "Тупе Полотно" v2 - Виправлені Трикутники) ===
+// === sketch.js (Фінальна Версія v3.0 - "Живі" + "Запечені") ===
 
-// --- ГЛОБАЛЬНІ ЗМІННІ (Тільки для малювання) ---
+// --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
 let launchPoints = {}; 
 let allCities = []; 
 let staticMapBuffer; 
 let scarColors = []; 
-let dnaCounter = 107000; // Початкове значення
+let dnaCounter = 107000; 
+let liveAttacks = []; // 🔴 ПОВЕРТАЄМО "ЖИВІ" АТАКИ
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -35,7 +36,6 @@ function setup() {
   createCanvas(w, h);
   staticMapBuffer = createGraphics(w, h);
   
-  // Ініціалізуємо кольори
   scarColors = [
     color(255, 255, 0, 30), color(0, 255, 0, 30), color(255, 0, 255, 30),
     color(0, 255, 255, 30), color(200, 255, 0, 30), color(255, 100, 0, 30),
@@ -53,20 +53,36 @@ function setup() {
   setInterval(checkAlertStatus, 10000); 
 }
 
-// --- ГОЛОВНИЙ ЦИКЛ DRAW (Тепер дуже простий) ---
+// --- ГОЛОВНИЙ ЦИКЛ DRAW (🔴 ОНОВЛЕНИЙ) ---
 function draw() {
-  // 1. Малюємо наш готовий буфер "DNA" + "Пам'ять"
+  // 1. Малюємо наш готовий буфер (тільки СТАРІ шрами)
   image(staticMapBuffer, 0, 0);
 
-  // 2. Малюємо годинник та фільтр
-  drawUpdatedClock(new Date()); 
-  
-  // БІЛЬШЕ НІЯКОЇ ЛОГІКИ. "Художник" просто показує те, що є.
+  // 2. 🔴 МАЛЮЄМО "ЖИВІ" ЛІНІЇ (НОВІ шрами, молодші 24 год)
+  let realCurrentTime = new Date();
+  for (let i = liveAttacks.length - 1; i >= 0; i--) {
+    let attack = liveAttacks[i];
+
+    // isExpired() перевіряє, чи пройшло 24 години з моменту СТВОРЕННЯ
+    if (attack.isExpired(realCurrentTime)) {
+      // Атака "померла" (пройшло 24 години)
+      // Ми її "запікаємо", щоб вона стала частиною DNA
+      drawScarToBuffer(attack.start, attack.end); // Малюємо в буфер
+      liveAttacks.splice(i, 1); // Видаляємо з "живих"
+      continue; 
+    }
+
+    attack.update(); // Оновлюємо анімацію польоту
+    attack.display(); // Малює червону лінію
+  }
+
+  // 3. Малюємо годинник та фільтр
+  drawUpdatedClock(realCurrentTime);
 }
 
 // === НОВІ ФУНКЦІЇ "ХУДОЖНИКА" ===
 
-// 1. Запитує ВСІ збережені шрами ОДИН РАЗ при завантаженні
+// 1. 🔴 ОНОВЛЕНО: Запитує ВСІ шрами і СОРТУЄ їх
 async function loadAllScarsFromServer() {
   try {
     const response = await fetch('/get-all-scars');
@@ -74,19 +90,32 @@ async function loadAllScarsFromServer() {
     
     if (data.error) throw new Error(data.error);
 
-    console.log(`✅ (Neon) Отримано ${data.scars.length} збережених шрамів з "Пам'яті".`);
-    
-    // Встановлюємо ПРАВИЛЬНИЙ лічильник
-    dnaCounter = 107000 + data.scars.length;
-    
-    // Малюємо збережені шрами на буфер
+    const now = new Date().getTime();
+    const hours24 = 24 * 60 * 60 * 1000; 
+    let bakedCount = 0;
+    let liveCount = 0;
+
+    // СОРТУЄМО ШРАМИ
     for (const scar of data.scars) {
-      // Конвертуємо координати назад у вектори p5
       let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
       let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
-      drawScarToBuffer(startVec, endVec); // Малюємо на буфер
+      const scarTime = new Date(scar.created_at).getTime();
+
+      // Перевіряємо, чи шрам СТАРШИЙ за 24 години
+      if ((now - scarTime) > hours24) {
+        // СТАРИЙ: "Запікаємо" його в DNA
+        drawScarToBuffer(startVec, endVec);
+        bakedCount++;
+      } else {
+        // НОВИЙ (< 24 год): Робимо його "живим"!
+        liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scarTime)));
+        liveCount++;
+      }
     }
-    console.log(`✅ (Neon) Всі ${data.scars.length} шрамів домальовано.`);
+    
+    // Лічильник = 107000 (база) + ВСІ шрами з "Пам'яті"
+    dnaCounter = 107000 + data.scars.length; 
+    console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} зараз "в ефірі".`);
 
   } catch (err) {
     console.error('Помилка завантаження шрамів з /get-all-scars:', err.message);
@@ -109,7 +138,6 @@ function checkAlertStatus() {
   });
 }
 
-
 // === ФУНКЦІЇ МАЛЮВАННЯ ===
 
 // Малює ОДИН шрам на буфер (використовує p5)
@@ -130,7 +158,7 @@ function drawScarToBuffer(start, end) {
   staticMapBuffer.endShape();
 }
 
-// === 🔴 ФУНКЦІЯ З ВИПРАВЛЕНИМ ПОРЯДКОМ МЕЛЮВАННЯ ===
+// (Виправлена версія з трикутниками)
 function buildStaticDNA() {
   randomSeed(99);
   staticMapBuffer.background(10, 10, 20);
@@ -230,8 +258,6 @@ function buildStaticDNA() {
   }
   console.log('Буфер "DNA" (Міста та Трикутники) готовий.');
 }
-// === КІНЕЦЬ ВИПРАВЛЕНОЇ ФУНКЦІЇ ===
-
 
 // Функції-помічники (потрібні для `buildStaticDNA`)
 function mapWithAspectRatio(lon, lat) {
@@ -324,4 +350,70 @@ function drawUpdatedClock(realTime) {
   }
   fill(255); 
   text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 100);
+}
+
+// 🔴 === ПОВЕРТАЄМО КЛАС LIVEFLIGHT ===
+class LiveFlight {
+  constructor(startVector, endVector, simulationStartTime) {
+    this.start = startVector;
+    this.end = endVector;
+    this.simulationStartTime = simulationStartTime; // ЗБЕРІГАЄМО ЧАС СТВОРЕННЯ
+    
+    this.speed = 0.005; 
+    this.weight = random(1.5, 1.5); 
+    this.color = color(255, 0, 0, 220); // Завжди червоний
+
+    this.progressHead = 0; 
+    this.progressTail = 0; 
+    this.tailLength = 1; 
+
+    // Генеруємо криву (p5)
+    let dist = p5.Vector.dist(this.start, this.end);
+    let bendFactor = dist * 0.5;
+    this.cp1_x = lerp(this.start.x, this.end.x, 0.1) + random(-bendFactor, bendFactor);
+    this.cp1_y = lerp(this.start.y, this.end.y, 0.1) + random(-bendFactor, bendFactor);
+    this.cp2_x = lerp(this.start.x, this.end.x, 0.7) + random(-bendFactor, bendFactor);
+    this.cp2_y = lerp(this.start.y, this.end.y, 0.7) + random(-bendFactor, bendFactor);
+  }
+
+  update() {
+    // Ця логіка тепер імітує "стирання"
+    // "Голова" летить вперед, ПОКИ НЕ ДОСЯГНЕ 1.0
+    if (this.progressHead < 1.0) {
+      this.progressHead += this.speed;
+    } else {
+      this.progressHead = 1.0;
+    }
+    // "Хвіст" летить за нею
+    this.progressTail = max(0, this.progressHead - this.tailLength);
+    // Коли "голова" долетіла, "хвіст" її наздоганяє
+    if (this.progressHead >= 1.0) {
+      this.progressTail += this.speed; 
+      this.progressTail = min(this.progressTail, 1.0); 
+    }
+  }
+
+  display() {
+    stroke(this.color);
+    strokeWeight(this.weight);
+    noFill();
+    beginShape();
+    // Малюємо від хвоста до голови
+    for (let t = this.progressTail; t < this.progressHead; t += 0.01) { 
+      let x = bezierPoint(this.start.x, this.cp1_x, this.cp2_x, this.end.x, t);
+      let y = bezierPoint(this.start.y, this.cp1_y, this.cp2_y, this.end.y, t);
+      vertex(x, y);
+    }
+    let headX = bezierPoint(this.start.x, this.cp1_x, this.cp2_x, this.end.x, this.progressHead);
+    let headY = bezierPoint(this.start.y, this.cp1_y, this.cp2_y, this.end.y, this.progressHead);
+    vertex(headX, headY);
+    endShape();
+  }
+
+  // Перевіряє, чи пройшло 24 години з моменту СТВОРЕННЯ
+  isExpired(currentSimTime) {
+    const hours24 = 24 * 60 * 60 * 1000; 
+    let expiryTime = new Date(this.simulationStartTime.getTime() + hours24);
+    return currentSimTime >= expiryTime;
+  }
 }
