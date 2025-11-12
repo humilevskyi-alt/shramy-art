@@ -53,11 +53,10 @@ function preload() {
 
 // --- SETUP ---
 function setup() {
-  console.log('Розраховуємо полотно 2000px...');
-  let aspect = windowWidth / windowHeight;
-  if (aspect > 1) { w = 2000; h = 2000 / aspect; }
-  else { h = 2000; w = 2000 * aspect; }
-  createCanvas(w, h);
+  console.log('Розраховуємо полотно за розміром вікна...');
+w = windowWidth;
+h = windowHeight;
+createCanvas(w, h);
 
   staticMapBuffer = createGraphics(w, h);
 
