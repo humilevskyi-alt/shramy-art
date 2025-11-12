@@ -24,6 +24,7 @@ const dbClient = new pg.Pool({
 let cachedAlertString = ""; 
 let previousAlertStates = {}; // Стан "до цього"
 let dnaCounter = 107000; // Базовий лічильник
+let lastError = null; // 🔴 <-- ДОДАЙ ЦЕЙ РЯДОК
 
 // === ЛОГІКА СИМУЛЯЦІЇ (ТЕПЕР ЖИВЕ У "МОЗКУ") ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
@@ -116,8 +117,8 @@ async function startServer() {
   pollExternalApi(); // Перевіряємо API
   setInterval(pollExternalApi, POLLING_INTERVAL);
   
-  simulateKabs(); // Запускаємо симуляцію КАБів
-  nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
+nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
+simulateKabs(); // Запускаємо симуляцію КАБів
 
   // --- ЗАПУСК СЕРВЕРА ---
   app.listen(PORT, () => {
