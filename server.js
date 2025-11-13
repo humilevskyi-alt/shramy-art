@@ -42,7 +42,7 @@ let lastError = null;
 // === ЛОГІКА СИМУЛЯЦІЇ (ТЕПЕР ЖИВЕ У "МОЗКУ") ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
 let nextKabSalvoTime = 0; 
-const CATALYST_CHANCE = 100; // 6% шанс
+const CATALYST_CHANCE = 15; // 6% шанс
 
 // 🔴 === НОВА ЛОГІКА "КАТАЛІЗАТОРА" ===
 
