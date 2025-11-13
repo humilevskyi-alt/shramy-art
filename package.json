@@ -4,8 +4,9 @@
   "description": "",
   "main": "sketch.js",
   "type": "module",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+ "scripts": {
+    "test": "echo \"Error no test specified\" && exit 1",
+    "worker": "node worker.js"
   },
   "keywords": [],
   "author": "",
