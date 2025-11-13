@@ -1,5 +1,5 @@
-// === server.js (Фінальна Версія v5.0 - "Галерея") ===
-// (Цей код ТІЛЬКИ показує сайт і віддає дані з бази)
+// === server.js (Фінальна Стійка Версія v5.2 - "Галерея") ===
+// (🔴 ВИПРАВЛЕННЯ: Тепер "Галерея" ТАКОЖ створює 'system_state')
 
 import express from 'express'; 
 import cors from 'cors'; 
@@ -37,6 +37,29 @@ async function startGallery() {
   try {
     await queryDatabase('SELECT NOW()'); 
     console.log('✅ (Галерея) Успішно підключено до "Пам\'яті"');
+
+    // 🔴 === ОСЬ ВИПРАВЛЕННЯ ===
+    //    Тепер "Галерея" теж створює ОБИДВІ таблиці,
+    //    щоб "Художник" (Cron Job) не обігнав її.
+    await queryDatabase(`
+      CREATE TABLE IF NOT EXISTS scars (
+        id SERIAL PRIMARY KEY,
+        start_lon FLOAT,
+        start_lat FLOAT,
+        end_lon FLOAT,
+        end_lat FLOAT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await queryDatabase(`
+      CREATE TABLE IF NOT EXISTS system_state (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+    console.log('✅ (Галерея) Таблиці "scars" та "system_state" готові.');
+    // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
+
   } catch (err) {
     console.error('❌ ПОМИЛКА ПІДКЛЮЧЕННЯ (Галерея/Neon):', err.message);
   }
@@ -47,7 +70,7 @@ async function startGallery() {
 
   // --- API МАРШРУТИ ДЛЯ "ХУДОЖНИКА" ---
   
-  // 1. 🔴 ОНОВЛЕНО: Віддає статус тривоги (читає з бази, що зберіг "Художник")
+  // 1. Віддає статус тривоги (читає з бази, що зберіг "Художник")
   app.get('/get-alert-status', async (req, res) => {
     try {
       const result = await queryDatabase("SELECT value FROM system_state WHERE key = 'current_alert_string'");
@@ -103,7 +126,7 @@ async function startGallery() {
   // --- ЗАПУСК СЕРВЕРА "ГАЛЕРЕЇ" ---
   app.listen(PORT, () => {
     console.log(`=================================================`);
-    console.log(`Проєкт "Шрами" (v5.0 "Галерея") запущено на http://localhost:${PORT}`);
+    console.log(`Проєкт "Шрами" (v5.2 "Галерея") запущено на http://localhost:${PORT}`);
     console.log(`=================================================`);
   });
 }
