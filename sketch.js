@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v4.0 - "Живий" + "Чистий Годинник") ===
+// === sketch.js (Фінальна Версія v5.1 - "Стійкий") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -7,8 +7,8 @@ let allCities = [];
 let staticMapBuffer; 
 let scarColors = []; 
 let dnaCounter = 107000; 
-let liveAttacks = []; // "Живі" атаки
-let lastKnownScarId = 0; // ID ОСТАННЬОГО ШРАМУ
+let liveAttacks = []; 
+let lastKnownScarId = 0; 
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -22,7 +22,6 @@ let w, h;
 
 // --- ГОДИННИК ТА СТАТУС ---
 let currentAlertStatus = { isActive: false, type: "ОЧІКУВАННЯ", error: null };
-// 🔴 Всі 24 "чисті" області (для годинника)
 const REGION_UIDS_TO_WATCH = [
   31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
   21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
@@ -51,8 +50,8 @@ function setup() {
   // 1. "Запікаємо" нашу ІСТОРІЮ (107,000)
   buildStaticDNA();
   
-  // 2. Завантажуємо "ПАМ'ЯТЬ" (всі збережені шрами з Neon)
-  loadAllScarsFromServer();
+  // 2. 🔴 ОНОВЛЕНО: Завантажуємо "ПАМ'ЯТЬ" з 3 спробами
+  loadAllScarsFromServer(3); // 3 спроби
   
   // 3. Запускаємо "пульс" годинника (питає ТІЛЬКИ статус)
   checkAlertStatus(); 
@@ -64,34 +63,47 @@ function setup() {
 
 // --- ГОЛОВНИЙ ЦИКЛ DRAW ---
 function draw() {
-  // 1. Малюємо наш готовий буфер (тільки СТАРІ шрами)
   image(staticMapBuffer, 0, 0);
-
-  // 2. МАЛЮЄМО "ЖИВІ" ЛІНІЇ (НОВІ шрами, молодші 24 год)
   let realCurrentTime = new Date();
   for (let i = liveAttacks.length - 1; i >= 0; i--) {
     let attack = liveAttacks[i];
-
-    // isExpired() перевіряє, чи пройшло 24 години з моменту СТВОРЕННЯ
     if (attack.isExpired(realCurrentTime)) {
-      drawScarToBuffer(attack.start, attack.end); // Малюємо в буфер
-      liveAttacks.splice(i, 1); // Видаляємо з "живих"
+      drawScarToBuffer(attack.start, attack.end); 
+      liveAttacks.splice(i, 1); 
       continue; 
     }
     attack.update(); 
     attack.display(); 
   }
-
-  // 3. Малюємо годинник та фільтр
   drawUpdatedClock(realCurrentTime);
 }
 
 // === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
 
-// 1. Запитує ВСІ збережені шрами ОДИН РАЗ при завантаженні
-async function loadAllScarsFromServer() {
+// 1. 🔴 ОНОВЛЕНО: Функція "fetch" з повторними спробами
+async function fetchWithRetry(url, retries = 3, delay = 1000) {
   try {
-    const response = await fetch('/get-all-scars');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Помилка: ${response.status}`);
+    return response;
+  } catch (err) {
+    if (retries > 0) {
+      console.warn(`(Fetch) Помилка, "холодний старт"? Залишилось ${retries} спроб...`);
+      // Чекаємо "delay" мілісекунд (1 сек) і пробуємо знову
+      await new Promise(res => setTimeout(res, delay));
+      return fetchWithRetry(url, retries - 1, delay * 2); // Подвоюємо затримку
+    } else {
+      console.error('(Fetch) Не вдалося підключитися після всіх спроб.');
+      throw err; // Кидаємо помилку остаточно
+    }
+  }
+}
+
+// 2. 🔴 ОНОВЛЕНО: Запитує ВСІ шрами (з повтором)
+async function loadAllScarsFromServer(retries) {
+  try {
+    // Використовуємо нову функцію
+    const response = await fetchWithRetry('/get-all-scars', retries);
     const data = await response.json();
     if (data.error) throw new Error(data.error);
 
@@ -100,18 +112,14 @@ async function loadAllScarsFromServer() {
     let bakedCount = 0;
     let liveCount = 0;
 
-    // СОРТУЄМО ШРАМИ
     for (const scar of data.scars) {
       let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
       let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
       const scarTime = new Date(scar.created_at).getTime();
-
-      // Перевіряємо, чи шрам СТАРШИЙ за 24 години
       if ((now - scarTime) > hours24) {
         drawScarToBuffer(startVec, endVec);
         bakedCount++;
       } else {
-        // НОВИЙ (< 24 год): Робимо його "живим"!
         liveAttacks.push(new LiveFlight(startVec, endVec, new Date(scarTime)));
         liveCount++;
       }
@@ -121,39 +129,40 @@ async function loadAllScarsFromServer() {
     }
     dnaCounter = data.dnaCounter; 
     console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
+    
+    // 🔴 УСПІХ! Скидаємо помилку, якщо вона була
+    updateAlertStatus(null, null); 
 
   } catch (err) {
     console.error('Помилка завантаження шрамів з /get-all-scars:', err.message);
+    // 🔴 ПОКАЗУЄМО ПОМИЛКУ НА ГОДИННИКУ
+    updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
   }
 }
 
-// 2. ПЕРЕВІРКА СТАТУСУ (для годинника)
-function checkAlertStatus() {
-  fetch('/get-alert-status?t=' + new Date().getTime())
-  .then(response => {
-    if (!response.ok) { throw new Error(`Помилка: ${response.status}`); }
-    return response.text(); 
-  })
-  .then(alertString => {
+// 3. ПЕРЕВІРКА СТАТУСУ (для годинника) - теж робимо "стійкою"
+async function checkAlertStatus() {
+  try {
+    // Використовуємо fetchWithRetry, але лише 1 спробу (щоб не "гальмувало")
+    const response = await fetchWithRetry('/get-alert-status?t=' + new Date().getTime(), 1); 
+    const alertString = await response.text();
     updateAlertStatus(alertString, null); // Оновлюємо годинник
-  })
-  .catch(error => {
+  } catch (error) {
     console.error('Не можу отримати статус:', error);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
-  });
+  }
 }
 
-// 3. Перевірка НОВИХ шрамів (кожні 30 сек)
+// 4. Перевірка НОВИХ шрамів (кожні 30 сек)
 async function checkForNewScars() {
   try {
+    // (Тут "fetchWithRetry" не потрібен, бо він працює постійно)
     const response = await fetch(`/get-new-scars?lastId=${lastKnownScarId}`);
     const data = await response.json();
     if (data.error) throw new Error(data.error);
 
     if (data.newScars.length > 0) {
       console.log(`✅ (Live) Отримано ${data.newScars.length} НОВИХ шрамів!`);
-      
-      // Додаємо нові шрами в "живий" ефір
       for (const scar of data.newScars) {
         let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
         let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
@@ -165,7 +174,8 @@ async function checkForNewScars() {
     }
     dnaCounter = data.dnaCounter;
   } catch (err) {
-    console.error('Помилка завантаження НОВИХ шрамів:', err.message);
+    // (Не показуємо помилку, щоб не заважати "ПОМИЛКА ЗВ'ЯЗКУ" при завантаженні)
+    console.error('Помилка завантаження НОВИХ шрамів (пропускаємо):', err.message);
   }
 }
 // === КІНЕЦЬ ЗАПИТІВ ===
@@ -307,7 +317,7 @@ function generateFrontlinePoints(numPoints) {
   return frontlineNodes;
 }
 
-// === 🔴 ГОДИННИК З ВИПРАВЛЕНОЮ ЛОГІКОЮ "ВІЧНОЇ ТРИВОГИ" ===
+// === ГОДИННИК З ВИПРАВЛЕНОЮ ЛОГІКОЮ "ВІЧНОЇ ТРИВОГИ" ===
 function updateAlertStatus(alertString, errorMsg) {
   currentAlertStatus.error = errorMsg; 
   if (errorMsg) {
@@ -316,7 +326,7 @@ function updateAlertStatus(alertString, errorMsg) {
     return;
   }
   
-  // Перевіряємо, чи є 'A' (Тривога) ТІЛЬКИ у "чистих" областях
+  // 🔴 Перевіряємо, чи є 'A' (Тривога) ТІЛЬКИ у "чистих" областях
   let isAnyCleanAlertActive = false;
   if (alertString) {
     for (const uid of REGION_UIDS_TO_WATCH) {
@@ -369,7 +379,7 @@ function drawUpdatedClock(realTime) {
     text(`ПОМИЛКА: ${typeText}`, 10, 70);
   } else {
     fill(255); 
-    text(`СТАН: ${typeText}`, 10, 70); // 🔴 Це той рядок, що дублюється
+    text(`СТАН: ${typeText}`, 10, 70); 
   }
   fill(255); 
   text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 100);

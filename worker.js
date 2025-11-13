@@ -1,4 +1,4 @@
-// === worker.js (Це "Справжній Мозок" / "Художник", що працює за розкладом) ===
+// === worker.js (v5.1 - Виправлено "Баг Першого Запуску") ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -26,7 +26,7 @@ async function queryDatabase(queryText, values) {
 }
 // --- КІНЕЦЬ НАЛАШТУВАННЯ БАЗИ ---
 
-// === ЛОГІКА СИМУЛЯЦІЇ (Копія з server.js) ===
+// === ЛОГІКА СИМУЛЯЦІЇ (без змін) ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
 const CATALYST_CHANCE = 6; // 6% шанс
 const REGION_UIDS_TO_WATCH = [
@@ -93,7 +93,7 @@ async function runWorker() {
 // === ДВИГУН Б: ПУЛЬС API (Перевіряє тривоги) ===
 async function pollExternalApi(db) {
   let previousAlertStates = {};
-  let lastError = null;
+  let isFirstRun = false; // 🔴 ВИПРАВЛЕННЯ БАГУ №1
 
   // 1. Отримуємо "попередній" стан з бази даних
   try {
@@ -101,7 +101,8 @@ async function pollExternalApi(db) {
     if (stateResult.rows.length > 0) {
       previousAlertStates = JSON.parse(stateResult.rows[0].value);
     } else {
-      console.log('(Logic) "Попередній" стан тривог не знайдено, створюємо новий...');
+      console.log('(Logic) "Попередній" стан тривог не знайдено. Це ПЕРШИЙ ЗАПУСК.');
+      isFirstRun = true; // 🔴 Вмикаємо прапор "першого запуску"
     }
   } catch (err) { console.error('! (Worker) Не вдалося прочитати "попередній" стан:', err.message); }
 
@@ -109,10 +110,9 @@ async function pollExternalApi(db) {
   let cachedAlertString = "";
   try {
     const response = await axios.get('https://api.alerts.in.ua/v1/iot/active_air_raid_alerts.json', {
-      headers: { 'Authorization': 'Bearer ' + API_TOKEN }
+    headers: { 'Authorization': 'Bearer ' + API_TOKEN }
     });
     cachedAlertString = response.data; 
-    lastError = null; 
     console.log(`Пульс (IoT): Отримано рядок статусу, довжина: ${cachedAlertString.length}`);
     
     // 3. ЗБЕРІГАЄМО "поточний" стан у базу для "Галереї"
@@ -129,10 +129,12 @@ async function pollExternalApi(db) {
         let isRegionCurrentlyActive = (cachedAlertString.charAt(uid) === 'A');
         let wasRegionActive = previousAlertStates[uid] || false; 
 
-        if (isRegionCurrentlyActive && !wasRegionActive) {
+        // 🔴 ВИПРАВЛЕННЯ БАГУ №1: Кидаємо кубик, ТІЛЬКИ ЯКЩО це НЕ "перший запуск"
+        if (isRegionCurrentlyActive && !wasRegionActive && !isFirstRun) {
           console.log(`!!! (Двигун Б) КАТАЛІЗАТОР: НОВА ТРИВОГА в UID: ${uid}`);
           await triggerCatalystRolls(db); // Кидаємо кубик
         }
+        
         newPreviousStates[uid] = isRegionCurrentlyActive;
       }
     }
@@ -153,6 +155,7 @@ async function pollExternalApi(db) {
 // === ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (Таймер) ===
 async function simulateKabs(db) {
   let nextKabSalvoTime = 0;
+  let isFirstRun = false; // 🔴 ВИПРАВЛЕННЯ БАГУ №1 (для КАБів)
   
   // 1. Отримуємо час НАСТУПНОГО залпу з бази
   try {
@@ -161,6 +164,7 @@ async function simulateKabs(db) {
       nextKabSalvoTime = parseInt(timeResult.rows[0].value);
     } else {
       console.log('(Logic) Таймер КАБів не знайдено, створюємо новий...');
+      isFirstRun = true;
       nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
     }
   } catch (err) { console.error('! (Worker) Не вдалося прочитати таймер КАБів:', err.message); }
@@ -168,9 +172,15 @@ async function simulateKabs(db) {
   // 2. Перевіряємо, чи настав час
   let now = Date.now();
   if (now > nextKabSalvoTime) {
-    console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
-    let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
-    await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
+    
+    // 🔴 ВИПРАВЛЕННЯ БАГУ №1: НЕ запускаємо КАБи при першому запуску, ТІЛЬКИ ставимо таймер
+    if (isFirstRun) {
+      console.log(`(Двигун А) Перший запуск. КАБи не запускаємо, просто ставимо таймер.`);
+    } else {
+      console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
+      let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
+      await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
+    }
     
     // 3. Встановлюємо НОВИЙ час
     let nextInterval = KAB_TIMER_AVG_INTERVAL + (Math.random() - 0.5) * 3600000; // +/- 30 хв
