@@ -46,7 +46,7 @@ function setup() {
   let aspect = windowWidth / windowHeight; 
 
   // 2. Встановлюємо "цільову" ширину 2000px ЗАВЖДИ
-  let targetWidth = 2000; 
+  let targetWidth = 4000; 
   
   // 3. Встановлюємо глобальні w та h
  w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
