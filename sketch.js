@@ -381,7 +381,7 @@ class LiveFlight {
     this.start = startVector;
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
-    this.speed = 0.005; 
+    this.speed = 0.0025; 
     
     // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" (v5.5) ===
     this.weight = random(0.5, 1.0) * STROKE_SCALE; 
