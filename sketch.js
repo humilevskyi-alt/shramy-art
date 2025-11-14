@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v5.7 - "Адаптивна Роздільна Здатність") ===
+// === sketch.js (Фінальна Версія v6.2 - "Правильний Розмір" + "Чисте Полотно") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -35,36 +35,29 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (Повністю нова логіка роздільної здатності) ---
+// --- 🔴 SETUP (v6.2 - Повертаємо windowWidth) ---
 function setup() {
   console.log('Розраховуємо полотно...');
   
-  pixelDensity(1); 
+  pixelDensity(1); // Вимикаємо Retina
   
-  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "КАШІ" ===
-  // 1. Отримуємо РЕАЛЬНІ пропорції екрану
-  let aspect = windowWidth / windowHeight; 
+  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "РОЗМІРУ" ===
+  w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
+  h = windowHeight; // 2. Повертаємо полотно на ВЕСЬ екран
+  createCanvas(w, h); 
+  // === КІНЕЦЬ ВИПРАВЛЕННЯ РОЗМІРУ ===
 
-  // 2. Встановлюємо "цільову" ширину для малювання
-  let targetWidth = 2000; // Базова ширина для десктопу
+  noSmooth(); // Вимикаємо "розмитість"
   
-  if (windowWidth < 768) { // Якщо це мобільний
-    targetWidth = 1200; // Використовуємо меншу, але все ще високу роздільну здатність
+  // 3. Адаптуємо масштаб, щоб не було "каші"
+  if (w < 768) { // Якщо це мобільний
     STROKE_SCALE = 0.5; // Робимо все в 2 рази тоншим
     console.log(`(Адаптація) Мобільний режим увімкнено. Масштаб: ${STROKE_SCALE}`);
   }
-
-  // 3. Встановлюємо глобальні w та h
-  w = targetWidth;
-  h = targetWidth / aspect; // Розраховуємо висоту, щоб зберегти пропорції
-  // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
-
-  createCanvas(w, h); // Створюємо "велике" полотно (напр. 1200 x 2600)
-  noSmooth(); // Вимикаємо "розмитість"
   
   staticMapBuffer = createGraphics(w, h);
   staticMapBuffer.pixelDensity(1); 
-  staticMapBuffer.noSmooth(); // Вимикаємо "розмитість" і для буфера
+  staticMapBuffer.noSmooth(); 
   
   scarColors = [
     color(255, 255, 0, 30), color(0, 255, 0, 30), color(255, 0, 255, 30),
@@ -85,6 +78,7 @@ function setup() {
   // 4. Запускаємо "пульс" шрамів (питає про НОВІ шрами)
   setInterval(checkForNewScars, 30000); // Кожні 30 секунд
 }
+// === КІНЕЦЬ SETUP ===
 
 // --- ГОЛОВНИЙ ЦИКЛ DRAW ---
 function draw() {
@@ -100,7 +94,19 @@ function draw() {
     attack.update(); 
     attack.display(); 
   }
-  drawUpdatedClock(realCurrentTime);
+  
+  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "ЛІЧИЛЬНИКІВ" ===
+  // 3. Малюємо годинник та фільтр
+  // drawUpdatedClock(realCurrentTime); // Ми "вимкнули" інтерфейс
+  
+  // 🔴 АЛЕ ми ЗАЛИШАЄМО "червоний фільтр",
+  //    бо він є частиною арту (ти просив його раніше)
+  if (currentAlertStatus.isActive) {
+    fill(255, 0, 0, 30); 
+    noStroke();
+    rect(0, 0, width, height);
+  }
+  // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
 }
 
 // === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
@@ -114,12 +120,11 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   } catch (err) {
     if (retries > 0) {
       console.warn(`(Fetch) Помилка, "холодний старт"? Залишилось ${retries} спроб...`);
-      // Чекаємо "delay" мілісекунд (1 сек) і пробуємо знову
       await new Promise(res => setTimeout(res, delay));
-      return fetchWithRetry(url, retries - 1, delay * 2); // Подвоюємо затримку
+      return fetchWithRetry(url, retries - 1, delay * 2); 
     } else {
       console.error('(Fetch) Не вдалося підключитися після всіх спроб.');
-      throw err; // Кидаємо помилку остаточно
+      throw err; 
     }
   }
 }
@@ -127,7 +132,6 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
 // 2. Запитує ВСІ шрами (з повтором)
 async function loadAllScarsFromServer(retries) {
   try {
-    // Використовуємо нову функцію
     const response = await fetchWithRetry('/get-all-scars', retries);
     const data = await response.json();
     if (data.error) throw new Error(data.error);
@@ -152,26 +156,21 @@ async function loadAllScarsFromServer(retries) {
         lastKnownScarId = scar.id;
       }
     }
-    dnaCounter = data.dnaCounter; 
+    dnaCounter = data.dnaCounter; // Ми все ще зберігаємо лічильник (просто не малюємо)
     console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
-    
-    // УСПІХ! Скидаємо помилку, якщо вона була
     updateAlertStatus(null, null); 
-
   } catch (err) {
     console.error('Помилка завантаження шрамів з /get-all-scars:', err.message);
-    // ПОКАЗУЄМО ПОМИЛКУ НА ГОДИННИКУ
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
   }
 }
 
-// 3. ПЕРЕВІРКА СТАТУСУ (для годинника) - теж робимо "стійкою"
+// 3. ПЕРЕВІРКА СТАТУСУ (для годинника)
 async function checkAlertStatus() {
   try {
-    // Використовуємо fetchWithRetry, але лише 1 спробу (щоб не "гальмувало")
     const response = await fetchWithRetry('/get-alert-status?t=' + new Date().getTime(), 1); 
     const alertString = await response.text();
-    updateAlertStatus(alertString, null); // Оновлюємо годинник
+    updateAlertStatus(alertString, null); // Оновлюємо годинник (для червоного фільтра)
   } catch (error) {
     console.error('Не можу отримати статус:', error);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
@@ -181,7 +180,6 @@ async function checkAlertStatus() {
 // 4. Перевірка НОВИХ шрамів (кожні 30 сек)
 async function checkForNewScars() {
   try {
-    // (Тут "fetchWithRetry" не потрібен, бо він працює постійно)
     const response = await fetch(`/get-new-scars?lastId=${lastKnownScarId}`);
     const data = await response.json();
     if (data.error) throw new Error(data.error);
@@ -197,9 +195,8 @@ async function checkForNewScars() {
         }
       }
     }
-    dnaCounter = data.dnaCounter;
+    dnaCounter = data.dnaCounter; // Ми все ще оновлюємо лічильник (просто не малюємо)
   } catch (err) {
-    // (Не показуємо помилку, щоб не заважати "ПОМИЛКА ЗВ'ЯЗКУ" при завантаженні)
     console.error('Помилка завантаження НОВИХ шрамів (пропускаємо):', err.message);
   }
 }
@@ -210,7 +207,6 @@ async function checkForNewScars() {
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
-  // 🔴 Адаптуємо товщину "запечених" шрамів
   staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
@@ -279,7 +275,6 @@ function buildStaticDNA() {
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
   
-  // 🔴 Адаптуємо ЗІРКИ
   let starSize = 3 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
@@ -297,16 +292,15 @@ function buildStaticDNA() {
     }
   }
   
-  // 🔴 Адаптуємо ТРИКУТНИКИ
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6 * STROKE_SCALE; // 🔴 Адаптуємо
+      let s = 6 * STROKE_SCALE; 
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5 * STROKE_SCALE; // 🔴 Адаптуємо
+      s = 2.5 * STROKE_SCALE; 
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
@@ -348,7 +342,7 @@ function generateFrontlinePoints(numPoints) {
   return frontlineNodes;
 }
 
-// === ГОДИННИК З ВИПРАВЛЕНОЮ ЛОГІКОЮ "ВІЧНОЇ ТРИВОГИ" ===
+// === ГОДИННИК (Виправлено "Вічну Тривогу") ===
 function updateAlertStatus(alertString, errorMsg) {
   currentAlertStatus.error = errorMsg; 
   if (errorMsg) {
@@ -357,7 +351,6 @@ function updateAlertStatus(alertString, errorMsg) {
     return;
   }
   
-  // 🔴 Перевіряємо, чи є 'A' (Тривога) ТІЛЬКИ у "чистих" областях
   let isAnyCleanAlertActive = false;
   if (alertString) {
     for (const uid of REGION_UIDS_TO_WATCH) {
@@ -376,62 +369,62 @@ function updateAlertStatus(alertString, errorMsg) {
     currentAlertStatus.type = "НЕМАЄ ЗАГРОЗ";
   }
 }
-function drawUpdatedClock(realTime) {
-  // 🔴 Адаптуємо розмір шрифта та відступи
-  let fontSize = 16;
-  let lineHeight = 30;
-  let boxHeight = 130;
-  
-  if (STROKE_SCALE < 1.0) { // Якщо це мобільний
-    fontSize = 12; // Робимо шрифт меншим
-    lineHeight = 22; // Зменшуємо відстань між рядками
-    boxHeight = 100; // Робимо чорну плашку меншою
-  }
 
-  let timeString = realTime.toLocaleString('uk-UA', {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
-  let status, statusColor;
-  let typeText = currentAlertStatus.type;
-  if (currentAlertStatus.isActive) {
-    status = `АКТИВНА ФАЗА`;
-    statusColor = color(255, 0, 0);
-  } else {
-    status = "ОЧІКУВАННЯ";
-    statusColor = color(0, 255, 0); 
-  }
-  if (currentAlertStatus.isActive) {
-    fill(255, 0, 0, 30); 
-    noStroke();
-    rect(0, 0, width, height);
-  }
-  fill(0, 150);
-  noStroke();
-  rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); // 🔴 Адаптуємо плашку
+// === ФУНКЦІЯ, ЯКУ МИ ВИМКНУЛИ ===
+function drawUpdatedClock(realTime) {
+  // ЦЯ ФУНКЦІЯ БІЛЬШЕ НЕ ВИКЛИКАЄТЬСЯ,
+  // АЛЕ МИ ЗАЛИШАЄМО ЇЇ КОД, ПРО ВСЯК ВИПАДОК
   
-  fill(255);
-  textSize(fontSize); // 🔴 Адаптуємо шрифт
-  textAlign(LEFT, TOP);
-  text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
+  // let fontSize = 16;
+  // let lineHeight = 30;
+  // let boxHeight = 130;
   
-  fill(statusColor);
-  text(`СТАТУС: ${status}`, 10, 10 + lineHeight); // 🔴 Адаптуємо відступ
+  // if (STROKE_SCALE < 1.0) { // Якщо це мобільний
+  //   fontSize = 12; 
+  //   lineHeight = 22; 
+  //   boxHeight = 100; 
+  // }
+
+  // let timeString = realTime.toLocaleString('uk-UA', {
+  //   year: 'numeric', month: 'long', day: 'numeric',
+  //   hour: '2-digit', minute: '2-digit', second: '2-digit'
+  // });
+  // let status, statusColor;
+  // let typeText = currentAlertStatus.type;
+  // if (currentAlertStatus.isActive) {
+  //   status = `АКТИВНА ФАЗА`;
+  //   statusColor = color(255, 0, 0);
+  // } else {
+  //   status = "ОЧІКУВАННЯ";
+  //   statusColor = color(0, 255, 0); 
+  // }
+
+  // fill(0, 150);
+  // noStroke();
+  // rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); 
   
-  let errorMsg = currentAlertStatus.error;
-  if (errorMsg) {
-    fill(255, 100, 100); 
-    text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); // 🔴 Адаптуємо відступ
-  } else {
-    fill(255); 
-    text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); // 🔴 Адаптуємо відступ
-  }
+  // fill(255);
+  // textSize(fontSize); 
+  // textAlign(LEFT, TOP);
+  // text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
   
-  fill(255); 
-  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); // 🔴 Адаптуємо відступ
+  // fill(statusColor);
+  // text(`СТАТУС: ${status}`, 10, 10 + lineHeight); 
+  
+  // let errorMsg = currentAlertStatus.error;
+  // if (errorMsg) {
+  //   fill(255, 100, 100); 
+  //   text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); 
+  // } else {
+  //   fill(255); 
+  //   text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); 
+  // }
+  
+  // fill(255); 
+  // text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); 
 }
 
-// === КЛАС LIVEFLIGHT ===
+// === КЛАС LIVEFLIGHT (Виправлена товщина v5.5) ===
 class LiveFlight {
   constructor(startVector, endVector, simulationStartTime) {
     this.start = startVector;
@@ -439,10 +432,8 @@ class LiveFlight {
     this.simulationStartTime = simulationStartTime; 
     this.speed = 0.005; 
     
-    // 🔴 === ОСЬ ВИПРАВЛЕННЯ ДЛЯ "КАШІ" НА ТЕЛЕФОНІ ===
-    //    Робимо "живі" лінії такими ж тонкими, як "запечені"
+    // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" (v5.5) ===
     this.weight = random(0.5, 1.0) * STROKE_SCALE; 
-    // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
