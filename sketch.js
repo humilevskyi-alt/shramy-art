@@ -49,8 +49,9 @@ function setup() {
   let targetWidth = 2000; 
   
   // 3. Встановлюємо глобальні w та h
-  w = targetWidth;
-  h = targetWidth / aspect; // Розраховуємо висоту, щоб зберегти пропорції
+ w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
+  h = windowHeight; // 2. Повертаємо полотно на ВЕСЬ екран
+  createCanvas(w, h);
   // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
 
   createCanvas(w, h); // Створюємо "велике" полотно (2000px)
