@@ -1,4 +1,4 @@
-// === worker.js (v5.3 - "Невбивний" - Виправлено 'Connection terminated') ===
+// === worker.js (v5.6 - "Виправлені КАБи") ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -57,13 +57,9 @@ async function runWorker() {
     // 0. Підключаємось до "Пам'яті"
     dbConnection = await dbClient.connect();
     
-    // 🔴 === ОСЬ ВИПРАВЛЕННЯ ЗБОЮ ===
-    //    Ми вішаємо "запобіжник" НА "ПЛАВЦЯ" (dbConnection),
-    //    щоб він не "вбив" "Художника", коли Neon "засне".
     dbConnection.on('error', (err) => {
       console.error('❌ (Worker/Client) Клієнт Neon "заснув", але ми це зловили:', err.message);
     });
-    // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
     
     console.log('✅ (Worker) Підключено до Neon.');
 
@@ -142,6 +138,7 @@ async function pollExternalApi(db) {
           console.log(`!!! (Двигун Б) КАТАЛІЗАТОР: НОВА ТРИВОГА в UID: ${uid}`);
           await triggerCatalystRolls(db); // Кидаємо кубик
         }
+        
         newPreviousStates[uid] = isRegionCurrentlyActive;
       }
     }
@@ -159,10 +156,11 @@ async function pollExternalApi(db) {
   }
 }
 
-// === ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (Таймер) ===
+// === 🔴 ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (ВИПРАВЛЕНО) ===
 async function simulateKabs(db) {
   let nextKabSalvoTime = 0;
   let isFirstRun = false; 
+  let now = Date.now();
   
   // 1. Отримуємо час НАСТУПНОГО залпу з бази
   try {
@@ -172,20 +170,26 @@ async function simulateKabs(db) {
     } else {
       console.log('(Logic) Таймер КАБів не знайдено, створюємо новий...');
       isFirstRun = true;
-      nextKabSalvoTime = Date.now() + Math.random() * 900000; // 0-15 хв
+      nextKabSalvoTime = now + Math.random() * 900000; // 0-15 хв
+      
+      // 🔴 === ОСЬ ВИПРАВЛЕННЯ: ===
+      //    Негайно зберігаємо таймер, якщо це перший запуск
+      await db.query(
+        `INSERT INTO system_state (key, value) VALUES ('next_kab_time', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1;`,
+        [nextKabSalvoTime.toString()]
+      );
+      console.log(`(Двигун А) Перший запуск. Таймер встановлено. КАБи не запускаємо.`);
+      // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
     }
   } catch (err) { console.error('! (Worker) Не вдалося прочитати таймер КАБів:', err.message); }
 
   // 2. Перевіряємо, чи настав час
-  let now = Date.now();
   if (now > nextKabSalvoTime) {
-    if (isFirstRun) {
-      console.log(`(Двигун А) Перший запуск. КАБи не запускаємо, просто ставимо таймер.`);
-    } else {
-      console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
-      let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
-      await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
-    }
+    // 🔴 ВИПРАВЛЕННЯ: Ми більше не перевіряємо isFirstRun, бо ми вже зберегли таймер
+    console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
+    let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
+    await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
     
     // 3. Встановлюємо НОВИЙ час
     let nextInterval = KAB_TIMER_AVG_INTERVAL + (Math.random() - 0.5) * 3600000; // +/- 30 хв
