@@ -247,7 +247,7 @@ async function generateAndStoreScars(db, startKey, regionKey, amount) {
 
   try {
     await db.query(queryText, newScars);
-    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів.`);
+    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів. Новий лічильник: ${dnaCounter}`);
   } catch (err) {
     console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
