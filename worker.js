@@ -1,4 +1,4 @@
-// === worker.js (v5.8 - "Виправлено баг 'dnaCounter'") ===
+// === worker.js (v6.1 - "Зважені Загрози" + Виправлені КАБи) ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -26,13 +26,60 @@ async function queryDatabase(queryText, values) {
 }
 // --- КІНЕЦЬ НАЛАШТУВАННЯ БАЗИ ---
 
-// === ЛОГІКА СИМУЛЯЦІЇ (без змін) ===
+// --- СХОВИЩЕ ДАНИХ (в оперативній пам'яті) ---
+let cachedAlertString = ""; 
+let previousAlertStates = {}; 
+let lastError = null; 
+
+// === ЛОГІКА СИМУЛЯЦІЇ ===
 const KAB_TIMER_AVG_INTERVAL = 3600000; // 1 година
-const CATALYST_CHANCE = 6; // 6% шанс
-const REGION_UIDS_TO_WATCH = [
-  31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
-  21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
-];
+let nextKabSalvoTime = 0; 
+
+// 🔴 === НОВА ЛОГІКА "КАТАЛІЗАТОРА" (v6.1) ===
+
+// 1. Карта Правил (UID: [Шанс "бойової" (0-100), Цільова група, мін. шрами, макс. шрами])
+//    Базуючись на твоїй "вазі" (70, 50, 30, 10, 5, 1) і ділячи на 6 (щоб отримати ~4500 шрамів/міс)
+//    Math.max(1, ...) - це твій "1% мінімум"
+const REGION_RULES = {
+  // === ФРОНТ (Високий Шанс) ===
+  '22': [Math.max(1, 70/6), 'frontline', 100, 150], // Харківська (~11.6%)
+  '20': [Math.max(1, 70/6), 'frontline', 100, 150], // Сумська (~11.6%)
+  '23': [Math.max(1, 70/6), 'southern', 100, 150],  // Херсонська (~11.6%)
+  
+  // === БЛИЗЬКИЙ ТИЛ (Середній Шанс) ===
+  '44': [Math.max(1, 50/6), 'central', 80, 120],    // Дніпропетровська (~8.3%)
+  '12': [Math.max(1, 50/6), 'southern', 80, 120],   // Запорізька (~8.3%)
+  '17': [Math.max(1, 40/6), 'southern', 70, 110],   // Миколаївська (~6.6%)
+  '18': [Math.max(1, 30/6), 'southern', 70, 110],   // Одеська (5%)
+  
+  // === ЦЕНТР (Середній/Низький Шанс) ===
+  '31': [Math.max(1, 30/6), 'kyiv', 100, 150],      // м. Київ (5%)
+  '14': [Math.max(1, 30/6), 'kyiv', 100, 150],      // Київська (5%)
+  '25': [Math.max(1, 30/6), 'central', 60, 100],     // Чернігівська (5%)
+  '19': [Math.max(1, 20/6), 'central', 50, 90],     // Полтавська (~3.3%)
+  '15': [Math.max(1, 20/6), 'central', 50, 90],     // Кіровоградська (~3.3%)
+  '24': [Math.max(1, 20/6), 'central', 50, 90],     // Черкаська (~3.3%)
+  '36': [Math.max(1, 10/6), 'central', 40, 80],     // Вінницька (~1.6%)
+  '10': [Math.max(1, 10/6), 'central', 40, 80],     // Житомирська (~1.6%)
+
+  // === ЗАХІД (Мінімальний Шанс 1%) ===
+  '3':  [Math.max(1, 10/6), 'western', 40, 80],     // Хмельницька (~1.6%)
+  '27': [Math.max(1, 5/6),  'western', 30, 70],     // Львівська (1%)
+  '21': [Math.max(1, 1/6),  'western', 30, 70],     // Тернопільська (1%)
+  '5':  [Math.max(1, 1/6),  'western', 30, 70],     // Рівненська (1%)
+  '8':  [Math.max(1, 1/6),  'western', 30, 70],     // Волинська (1%)
+  '13': [Math.max(1, 1/6),  'western', 30, 70],     // Івано-Франківська (1%)
+  '26': [Math.max(1, 1/6),  'western', 30, 70],     // Чернівецька (1%)
+  '11': [Math.max(1, 1/6),  'western', 30, 70],     // Закарпатська (1%)
+  '9':  [1, 'central', 30, 70], // (UID 9 - Іванівська/Житомир?) -> 1%
+  '4':  [1, 'central', 30, 70], // (UID 4 - ?) -> 1%
+  '7':  [1, 'western', 30, 70], // (UID 7 - ?) -> 1%
+  '6':  [1, 'western', 30, 70]  // (UID 6 - ?) -> 1%
+};
+// Всі "чисті" UID, які ми відстежуємо (Крим, Донецьк, Луганськ - виключені)
+const REGION_UIDS_TO_WATCH = Object.keys(REGION_RULES).map(uid => parseInt(uid, 10));
+
+// 2. Координати запуску
 const launchPoints = {
   'Belgorod_Bryansk': { lon: 36.5, lat: 50.5, r: 0.5 },
   'Primorsko_Akhtarsk': { lon: 38.1, lat: 46.0, r: 0.5 },
@@ -40,17 +87,21 @@ const launchPoints = {
   'Black_Sea': { lon: 32.0, lat: 46.0, r: 0.5 },
   'Caspian_Sea': { lon: 48.0, lat: 46.0, r: 0.5 }
 };
+const LAUNCH_KEYS = Object.keys(launchPoints); // ['Belgorod_Bryansk', ...]
+
+// 3. Координати цілей
 const targetNodes = {
   frontline: [{ lon: 37.5, lat: 49.8 }, { lon: 37.8, lat: 48.5 }, { lon: 35.8, lat: 47.5 }, { lon: 33.0, lat: 46.7 }],
   kyiv: [{ lon: 30.52, lat: 50.45 }],
-  southern: [{ lon: 30.72, lat: 46.48 }, { lon: 31.99, lat: 46.97 }],
-  central: [{ lon: 28.68, lat: 48.29 }, { lon: 32.26, lat: 48.45 }, { lon: 28.46, lat: 49.23 }],
-  western: [{ lon: 24.02, lat: 49.83 }, { lon: 25.59, lat: 49.55 }, { lon: 24.71, lat: 48.92 }]
+  southern: [{ lon: 30.72, lat: 46.48 }, { lon: 31.99, lat: 46.97 }, { lon: 35.13, lat: 47.83 }],
+  central: [{ lon: 28.68, lat: 48.29 }, { lon: 32.26, lat: 48.45 }, { lon: 28.46, lat: 49.23 }, { lon: 34.61, lat: 49.58 }],
+  western: [{ lon: 24.02, lat: 49.83 }, { lon: 25.59, lat: 49.55 }, { lon: 24.71, lat: 48.92 }, { lon: 27.22, lat: 49.42 }]
 };
 // === КІНЕЦЬ ЛОГІКИ СИМУЛЯЦІЇ ===
 
-// --- ГОЛОВНА ФУНКЦІЯ "ХУДОЖНИКА" ---
-async function runWorker() {
+
+// --- ГОЛОВНА ФУНКЦІЯ ЗАПУСКУ ---
+async function startWorker() {
   console.log('--- (Worker) "Художник" прокинувся. Починаємо роботу... ---');
   let dbConnection;
   try {
@@ -130,13 +181,15 @@ async function pollExternalApi(db) {
     // 4. ОБРОБЛЯЄМО ТРИГЕРИ (H -> A)
     let newPreviousStates = { ...previousAlertStates };
     if (cachedAlertString.length > 50) {
+      // 🔴 НОВА ЛОГІКА (v6.1): Перебираємо КОЖНУ область, яку відстежуємо
       for (const uid of REGION_UIDS_TO_WATCH) {
         let isRegionCurrentlyActive = (cachedAlertString.charAt(uid) === 'A');
         let wasRegionActive = previousAlertStates[uid] || false; 
 
         if (isRegionCurrentlyActive && !wasRegionActive && !isFirstRun) {
           console.log(`!!! (Двигун Б) КАТАЛІЗАТОР: НОВА ТРИВОГА в UID: ${uid}`);
-          await triggerCatalystRolls(db); // Кидаємо кубик
+          // Передаємо ПРАВИЛА для цієї області
+          await triggerCatalystRolls(db, REGION_RULES[uid]); 
         }
         
         newPreviousStates[uid] = isRegionCurrentlyActive;
@@ -186,7 +239,7 @@ async function simulateKabs(db) {
     if (!isFirstRun) {
       console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
       let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
-      await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
+      await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize, 1);
     }
     
     // 3. Встановлюємо НОВИЙ час
@@ -204,27 +257,47 @@ async function simulateKabs(db) {
   }
 }
 
-// --- ЛОГІКА КИДКІВ КУБИКА (Двигун Б) ---
-async function triggerCatalystRolls(db) {
-  if (Math.random() * 100 < CATALYST_CHANCE) {
-    const r = Math.random() * 100;
-    let targetKey;
-    if (r < 25.0) { targetKey = 'kyiv'; }
-    else if (r < 50.0) { targetKey = 'southern'; }
-    else if (r < 92.5) { targetKey = 'central'; }
-    else { targetKey = 'western'; }
+// --- 🔴 ЛОГІКА КИДКІВ КУБИКА (v6.1 - "Зважена") ---
+async function triggerCatalystRolls(db, rules) {
+  // rules = [Шанс "бойової" (0-100), Цільова група, мін. шрами, макс. шрами]
+  if (!rules) return; // Якщо для цього UID немає правил (напр. він не в списку)
 
-    console.log(`!!! (Двигун Б) УСПІХ (6%): Кидок №2 -> Ціль: ${targetKey.toUpperCase()}`);
-    let salvoSize = Math.floor(Math.random() * (140 - 100) + 100); // 100-140
-    let startKey = ['Belgorod_Bryansk', 'Primorsko_Akhtarsk', 'Crimea', 'Black_Sea', 'Caspian_Sea'][Math.floor(Math.random() * 5)];
-    await generateAndStoreScars(db, startKey, targetKey, salvoSize);
+  const battleChance = rules[0];
+  const targetKey = rules[1];
+  const minSalvo = rules[2];
+  const maxSalvo = rules[3];
+
+  // 1. "Кидок Кубика" №1 (Зважений Шанс)
+  if (Math.random() * 100 < battleChance) {
+    // УСПІХ!
+    console.log(`!!! (Двигун Б) УСПІХ (${battleChance}%): Ціль: ${targetKey.toUpperCase()}`);
+    
+    // 2. "Кидок Кубика" №2 (Сила Залпу)
+    let salvoSize = Math.floor(Math.random() * (maxSalvo - minSalvo) + minSalvo);
+    
+    // 3. Патерн "Кліщі" (від 3 до 5 точок запуску)
+    let attackPointsCount = Math.floor(Math.random() * 3) + 3; // 3, 4, or 5
+    // Тасуємо 5 баз запуску
+    let shuffledLaunchKeys = LAUNCH_KEYS.sort(() => 0.5 - Math.random());
+    // Беремо перші 3-5
+    let attackKeys = shuffledLaunchKeys.slice(0, attackPointsCount);
+    
+    console.log(`... (Двигун Б) Патерн "Кліщі": ${salvoSize} шрамів з ${attackKeys.length} баз (${attackKeys.join(', ')})`);
+
+    // 4. Генеруємо та ЗБЕРІГАЄМО шрами (розділяємо залп між базами)
+    let scarsPerBase = Math.floor(salvoSize / attackPointsCount);
+    for (const startKey of attackKeys) {
+      await generateAndStoreScars(db, startKey, targetKey, scarsPerBase);
+    }
+
   } else {
-    console.log(`--- (Двигун Б) (94%): "Кубик" не випав (хибна тривога).`);
+    console.log(`--- (Двигун Б) (${100-battleChance}%): "Кубик" не випав (хибна тривога).`);
   }
 }
 
-// --- ФУНКЦІЯ ЗБЕРЕЖЕННЯ В "ПАМ'ЯТЬ" (Neon) ---
+// --- 🔴 ФУНКЦІЯ ЗБЕРЕЖЕННЯ В "ПАМ'ЯТЬ" (Виправлено баг 'dnaCounter') ---
 async function generateAndStoreScars(db, startKey, regionKey, amount) {
+  if (amount <= 0) return; // Немає чого зберігати
   const startCluster = launchPoints[startKey];
   const targetGroup = targetNodes[regionKey];
   if (!startCluster || !targetGroup) return;
@@ -245,8 +318,8 @@ async function generateAndStoreScars(db, startKey, regionKey, amount) {
 
   try {
     await db.query(queryText, newScars);
-    // 🔴 === ОСЬ ВИПРАВЛЕННЯ: ===
-    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів.`);
+    // 🔴 === ВИПРАВЛЕНО БАГ "dnaCounter" ===
+    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів (Ціль: ${regionKey}, Старт: ${startKey}).`);
   } catch (err) {
     console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
