@@ -1,4 +1,4 @@
-// === worker.js (v5.6 - "Виправлені КАБи") ===
+// === worker.js (v5.7 - Виправлено баг 'dnaCounter') ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -156,7 +156,7 @@ async function pollExternalApi(db) {
   }
 }
 
-// === 🔴 ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (ВИПРАВЛЕНО) ===
+// === ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (Таймер) ===
 async function simulateKabs(db) {
   let nextKabSalvoTime = 0;
   let isFirstRun = false; 
@@ -172,24 +172,22 @@ async function simulateKabs(db) {
       isFirstRun = true;
       nextKabSalvoTime = now + Math.random() * 900000; // 0-15 хв
       
-      // 🔴 === ОСЬ ВИПРАВЛЕННЯ: ===
-      //    Негайно зберігаємо таймер, якщо це перший запуск
       await db.query(
         `INSERT INTO system_state (key, value) VALUES ('next_kab_time', $1)
          ON CONFLICT (key) DO UPDATE SET value = $1;`,
         [nextKabSalvoTime.toString()]
       );
       console.log(`(Двигун А) Перший запуск. Таймер встановлено. КАБи не запускаємо.`);
-      // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
     }
   } catch (err) { console.error('! (Worker) Не вдалося прочитати таймер КАБів:', err.message); }
 
   // 2. Перевіряємо, чи настав час
   if (now > nextKabSalvoTime) {
-    // 🔴 ВИПРАВЛЕННЯ: Ми більше не перевіряємо isFirstRun, бо ми вже зберегли таймер
-    console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
-    let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
-    await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
+    if (!isFirstRun) {
+      console.log(`--- (Двигун А) СИМУЛЯЦІЯ КАБ: Запускаємо залп на лінію фронту ---`);
+      let salvoSize = Math.floor(Math.random() * (10 - 4) + 4); // 4-9
+      await generateAndStoreScars(db, 'Belgorod_Bryansk', 'frontline', salvoSize);
+    }
     
     // 3. Встановлюємо НОВИЙ час
     let nextInterval = KAB_TIMER_AVG_INTERVAL + (Math.random() - 0.5) * 3600000; // +/- 30 хв
@@ -247,11 +245,15 @@ async function generateAndStoreScars(db, startKey, regionKey, amount) {
 
   try {
     await db.query(queryText, newScars);
-    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів. Новий лічильник: ${dnaCounter}`);
+    // 🔴 === ОСЬ ВИПРАВЛЕННЯ: ===
+    //    Ми прибрали 'dnaCounter' звідси, бо 'worker' його не знає.
+    console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів.`);
   } catch (err) {
     console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
 }
 
+// === ЗАПУСКАЄМО "ХУДОЖНИКА" ===
+runWorker();
 // === ЗАПУСКАЄМО "ХУДОЖНИКА" ===
 runWorker();
