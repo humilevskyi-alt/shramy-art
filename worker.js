@@ -1,4 +1,4 @@
-// === worker.js (v5.1 - Виправлено "Баг Першого Запуску") ===
+// === worker.js (v5.3 - "Невбивний" - Виправлено 'Connection terminated') ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -13,14 +13,14 @@ const dbClient = new pg.Pool({
   ssl: { rejectUnauthorized: false }
 });
 dbClient.on('error', (err) => {
-  console.error('❌ (Worker/Neon) ВТРАЧЕНО ЗВ\'ЯЗОК ІЗ "ПАМ\'ЯТТЮ"!', err.message);
+  console.error('❌ (Worker/Pool) Помилка "басейну" Neon!', err.message);
 });
 async function queryDatabase(queryText, values) {
   try {
     const result = await dbClient.query(queryText, values);
     return result;
   } catch (err) {
-    console.error('❌ (Worker/Neon) Помилка запиту до бази:', err.message);
+    console.error('❌ (Worker/Query) Помилка запиту до бази:', err.message);
     throw err; 
   }
 }
@@ -56,9 +56,18 @@ async function runWorker() {
   try {
     // 0. Підключаємось до "Пам'яті"
     dbConnection = await dbClient.connect();
+    
+    // 🔴 === ОСЬ ВИПРАВЛЕННЯ ЗБОЮ ===
+    //    Ми вішаємо "запобіжник" НА "ПЛАВЦЯ" (dbConnection),
+    //    щоб він не "вбив" "Художника", коли Neon "засне".
+    dbConnection.on('error', (err) => {
+      console.error('❌ (Worker/Client) Клієнт Neon "заснув", але ми це зловили:', err.message);
+    });
+    // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
+    
     console.log('✅ (Worker) Підключено до Neon.');
 
-    // 1. Створюємо таблиці, якщо їх немає (для стану і лічильників)
+    // 1. Створюємо таблиці, якщо їх немає
     await dbConnection.query(`
       CREATE TABLE IF NOT EXISTS system_state (
         key TEXT PRIMARY KEY,
@@ -93,7 +102,7 @@ async function runWorker() {
 // === ДВИГУН Б: ПУЛЬС API (Перевіряє тривоги) ===
 async function pollExternalApi(db) {
   let previousAlertStates = {};
-  let isFirstRun = false; // 🔴 ВИПРАВЛЕННЯ БАГУ №1
+  let isFirstRun = false; 
 
   // 1. Отримуємо "попередній" стан з бази даних
   try {
@@ -102,7 +111,7 @@ async function pollExternalApi(db) {
       previousAlertStates = JSON.parse(stateResult.rows[0].value);
     } else {
       console.log('(Logic) "Попередній" стан тривог не знайдено. Це ПЕРШИЙ ЗАПУСК.');
-      isFirstRun = true; // 🔴 Вмикаємо прапор "першого запуску"
+      isFirstRun = true; 
     }
   } catch (err) { console.error('! (Worker) Не вдалося прочитати "попередній" стан:', err.message); }
 
@@ -110,7 +119,7 @@ async function pollExternalApi(db) {
   let cachedAlertString = "";
   try {
     const response = await axios.get('https://api.alerts.in.ua/v1/iot/active_air_raid_alerts.json', {
-    headers: { 'Authorization': 'Bearer ' + API_TOKEN }
+      headers: { 'Authorization': 'Bearer ' + API_TOKEN }
     });
     cachedAlertString = response.data; 
     console.log(`Пульс (IoT): Отримано рядок статусу, довжина: ${cachedAlertString.length}`);
@@ -129,12 +138,10 @@ async function pollExternalApi(db) {
         let isRegionCurrentlyActive = (cachedAlertString.charAt(uid) === 'A');
         let wasRegionActive = previousAlertStates[uid] || false; 
 
-        // 🔴 ВИПРАВЛЕННЯ БАГУ №1: Кидаємо кубик, ТІЛЬКИ ЯКЩО це НЕ "перший запуск"
         if (isRegionCurrentlyActive && !wasRegionActive && !isFirstRun) {
           console.log(`!!! (Двигун Б) КАТАЛІЗАТОР: НОВА ТРИВОГА в UID: ${uid}`);
           await triggerCatalystRolls(db); // Кидаємо кубик
         }
-        
         newPreviousStates[uid] = isRegionCurrentlyActive;
       }
     }
@@ -155,7 +162,7 @@ async function pollExternalApi(db) {
 // === ДВИГУН А: СИМУЛЯЦІЯ КАБІВ (Таймер) ===
 async function simulateKabs(db) {
   let nextKabSalvoTime = 0;
-  let isFirstRun = false; // 🔴 ВИПРАВЛЕННЯ БАГУ №1 (для КАБів)
+  let isFirstRun = false; 
   
   // 1. Отримуємо час НАСТУПНОГО залпу з бази
   try {
@@ -172,8 +179,6 @@ async function simulateKabs(db) {
   // 2. Перевіряємо, чи настав час
   let now = Date.now();
   if (now > nextKabSalvoTime) {
-    
-    // 🔴 ВИПРАВЛЕННЯ БАГУ №1: НЕ запускаємо КАБи при першому запуску, ТІЛЬКИ ставимо таймер
     if (isFirstRun) {
       console.log(`(Двигун А) Перший запуск. КАБи не запускаємо, просто ставимо таймер.`);
     } else {
