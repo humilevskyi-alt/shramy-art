@@ -277,7 +277,7 @@ function buildStaticDNA() {
   randomSeed(null);
   
   // 🔴 Адаптуємо ЗІРКИ
-  let starSize = 3 * STROKE_SCALE;
+  let starSize = 5 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
@@ -390,7 +390,7 @@ class LiveFlight {
     
     // 🔴 === ВИПРАВЛЕННЯ ТОВЩИНИ ===
     //    Повертаємо товстіші лінії
-    this.weight = random(1.0, 1.5) * STROKE_SCALE; 
+    this.weight = random(2.5, 3.5) * STROKE_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
