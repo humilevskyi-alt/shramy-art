@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v6.0 - "HD Rendering") ===
+// === sketch.js (Фінальна Версія v6.0 - "Адаптивний + Стійкий") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -10,10 +10,8 @@ let dnaCounter = 107000;
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
 
-// 🔴 ВІРТУАЛЬНИЙ РОЗМІР (Завжди висока якість)
-const VIRTUAL_WIDTH = 2000; 
-let virtualHeight; // Розрахуємо в setup
-let scaleFactor = 1; // Коефіцієнт зменшення для екрану
+// 🔴 АДАПТИВНИЙ МАСШТАБ
+let STROKE_SCALE = 1.0; // 1.0 для десктопу, 0.5 для мобільного
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -21,12 +19,13 @@ const majorCityNames = [
   "Львів", "Тернопіль", "Івано-Франківськ", "Старокостянтинів"
 ];
 const TOTAL_SCARS = 107000; 
-// Межі карти (Україна)
 const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
 const PADDING_PERCENT = 0.15;
+let w, h; 
 
 // --- ГОДИННИК ТА СТАТУС ---
 let currentAlertStatus = { isActive: false, type: "ОЧІКУВАННЯ", error: null };
+// 🔴 Всі 24 "чисті" області (для годинника)
 const REGION_UIDS_TO_WATCH = [
   31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
   21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
@@ -38,74 +37,59 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- SETUP ---
+// --- 🔴 SETUP (v6.0 - Адаптивна Роздільна Здатність) ---
 function setup() {
-  console.log('Розраховуємо HD полотно...');
+  console.log('Розраховуємо полотно...');
   
-  // 1. Створюємо полотно на ВЕСЬ екран телефону/компу
-  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1); // 1. Вимикаємо Retina
   
-  // 2. Розраховуємо ВІРТУАЛЬНІ розміри (HD якість)
-  // Пропорції карти на основі координат
-  let mapRatio = (bounds.maxLon - bounds.minLon) / (bounds.maxLat - bounds.minLat);
+  // 2. Отримуємо РЕАЛЬНІ пропорції екрану
+  let aspect = windowWidth / windowHeight; 
+
+  // 3. Встановлюємо "цільову" ширину для малювання
+  let targetWidth = 2000; // Базова ширина для десктопу
   
-  // Встановлюємо ширину 2000, висоту підганяємо під карту
-  // (але враховуємо відступи PADDING, тому реальна висота трохи інша, 
-  // спростимо: зробимо віртуальне полотно пропорційним екрану, але з базою 2000px)
-  
-  // Щоб карта влізла і виглядала як на ПК, ми фіксуємо ширину 2000
-  // А висоту беремо таку, щоб вмістити Україну з відступами
-  // Але простіше зафіксувати пропорції самого вікна, якщо ми хочемо "на весь екран"
-  // ТУТ ХИТРІСТЬ: Ми робимо віртуальне полотно ЗАВЖДИ 2000px по ширині.
-  
-  virtualHeight = VIRTUAL_WIDTH / (windowWidth / windowHeight);
-  
-  // Якщо віртуальна висота замала для карти, збільшимо її
-  if (virtualHeight < VIRTUAL_WIDTH / mapRatio) {
-      virtualHeight = VIRTUAL_WIDTH / mapRatio;
+  if (windowWidth < 768) { // Якщо це мобільний
+    targetWidth = 1200; // Використовуємо меншу, але все ще високу роздільну здатність
+    STROKE_SCALE = 0.5; // Робимо все в 2 рази тоншим
+    console.log(`(Адаптація) Мобільний режим увімкнено. Масштаб: ${STROKE_SCALE}`);
   }
 
-  // 3. Створюємо ГІГАНТСЬКИЙ буфер (де все буде малюватися)
-  staticMapBuffer = createGraphics(VIRTUAL_WIDTH, virtualHeight);
-  
-  // Повертаємо згладжування для красивого зменшення
-  smooth(); 
-  staticMapBuffer.smooth();
+  // 4. Встановлюємо глобальні w та h
+  w = targetWidth;
+  h = targetWidth / aspect; // Розраховуємо висоту, щоб зберегти пропорції
 
+  createCanvas(w, h); // Створюємо "велике" полотно (напр. 1200 x 2600)
+  noSmooth(); // Вимикаємо "розмитість"
+  
+  staticMapBuffer = createGraphics(w, h);
+  staticMapBuffer.pixelDensity(1); 
+  staticMapBuffer.noSmooth(); // Вимикаємо "розмитість" і для буфера
+  
   scarColors = [
     color(255, 255, 0, 30), color(0, 255, 0, 30), color(255, 0, 255, 30),
     color(0, 255, 255, 30), color(200, 255, 0, 30), color(255, 100, 0, 30),
     color(100, 0, 255, 30)
   ];
 
-  // 1. "Запікаємо" ІСТОРІЮ на ГІГАНТСЬКОМУ буфері
+  // 1. "Запікаємо" нашу ІСТОРІЮ (107,000)
   buildStaticDNA();
   
-  // 2. Завантажуємо "ПАМ'ЯТЬ"
-  loadAllScarsFromServer(3); 
+  // 2. Завантажуємо "ПАМ'ЯТЬ" (всі збережені шрами з Neon)
+  loadAllScarsFromServer(3); // 3 спроби
   
-  // 3. Таймери
+  // 3. Запускаємо "пульс" годинника (питає ТІЛЬКИ статус)
   checkAlertStatus(); 
   setInterval(checkAlertStatus, 10000); 
-  setInterval(checkForNewScars, 30000); 
+  
+  // 4. Запускаємо "пульс" шрамів (питає про НОВІ шрами)
+  setInterval(checkForNewScars, 30000); // Кожні 30 секунд
 }
+// === КІНЕЦЬ SETUP ===
 
 // --- ГОЛОВНИЙ ЦИКЛ DRAW ---
 function draw() {
-  background(10, 10, 20); // Фон малюємо на головному екрані
-
-  // 🔴 МАГІЯ МАСШТАБУВАННЯ
-  // Ми розраховуємо, як сильно треба зменшити 2000px, щоб влізти в екран телефону
-  scaleFactor = windowWidth / VIRTUAL_WIDTH;
-  
-  // Застосовуємо масштаб до ВСЬОГО, що малюється нижче
-  push(); 
-  scale(scaleFactor);
-
-  // 1. Малюємо наш ГІГАНТСЬКИЙ буфер (він зменшиться автоматично)
   image(staticMapBuffer, 0, 0);
-
-  // 2. Малюємо "Живі" лінії (вони теж зменшаться і стануть тонкими!)
   let realCurrentTime = new Date();
   for (let i = liveAttacks.length - 1; i >= 0; i--) {
     let attack = liveAttacks[i];
@@ -117,14 +101,11 @@ function draw() {
     attack.update(); 
     attack.display(); 
   }
-  
-  pop(); // Повертаємо масштаб назад для Годинника (щоб текст був чіткий)
-
-  // 3. Малюємо годинник (поверх усього, в оригінальному розмірі екрану)
-  // drawUpdatedClock(realCurrentTime);
+  drawUpdatedClock(realCurrentTime);
 }
 
-// ... (РЕШТА КОДУ: loadAllScarsFromServer, checkAlertStatus, checkForNewScars - БЕЗ ЗМІН) ...
+// === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
+
 // 1. Функція "fetch" з повторними спробами
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   try {
@@ -133,15 +114,17 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
     return response;
   } catch (err) {
     if (retries > 0) {
+      console.warn(`(Fetch) Помилка, "холодний старт"? Залишилось ${retries} спроб...`);
       await new Promise(res => setTimeout(res, delay));
       return fetchWithRetry(url, retries - 1, delay * 2); 
     } else {
-      console.error('(Fetch) Не вдалося підключитися.');
+      console.error('(Fetch) Не вдалося підключитися після всіх спроб.');
       throw err; 
     }
   }
 }
 
+// 2. Запитує ВСІ шрами (з повтором)
 async function loadAllScarsFromServer(retries) {
   try {
     const response = await fetchWithRetry('/get-all-scars', retries);
@@ -169,28 +152,35 @@ async function loadAllScarsFromServer(retries) {
       }
     }
     dnaCounter = data.dnaCounter; 
+    console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
     updateAlertStatus(null, null); 
   } catch (err) {
+    console.error('Помилка завантаження шрамів з /get-all-scars:', err.message);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
   }
 }
 
+// 3. ПЕРЕВІРКА СТАТУСУ (для годинника)
 async function checkAlertStatus() {
   try {
     const response = await fetchWithRetry('/get-alert-status?t=' + new Date().getTime(), 1); 
     const alertString = await response.text();
     updateAlertStatus(alertString, null); 
   } catch (error) {
+    console.error('Не можу отримати статус:', error);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
   }
 }
 
+// 4. Перевірка НОВИХ шрамів (кожні 30 сек)
 async function checkForNewScars() {
   try {
     const response = await fetch(`/get-new-scars?lastId=${lastKnownScarId}`);
     const data = await response.json();
     if (data.error) throw new Error(data.error);
+
     if (data.newScars.length > 0) {
+      console.log(`✅ (Live) Отримано ${data.newScars.length} НОВИХ шрамів!`);
       for (const scar of data.newScars) {
         let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
         let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
@@ -202,15 +192,17 @@ async function checkForNewScars() {
     }
     dnaCounter = data.dnaCounter;
   } catch (err) {
-    console.error('Помилка завантаження НОВИХ шрамів:', err.message);
+    console.error('Помилка завантаження НОВИХ шрамів (пропускаємо):', err.message);
   }
 }
+// === КІНЕЦЬ ЗАПИТІВ ===
+
 
 // === ФУНКЦІЇ МАЛЮВАННЯ ===
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
-  staticMapBuffer.strokeWeight(random(0.5, 1.5)); // Стандартна товщина (вона зменшиться scaleFactor-ом)
+  staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
   let dist = p5.Vector.dist(start, end);
@@ -222,13 +214,10 @@ function drawScarToBuffer(start, end) {
   staticMapBuffer.bezierVertex(cp1_x, cp1_y, cp2_x, cp2_y, end.x, end.y);
   staticMapBuffer.endShape();
 }
-
 function buildStaticDNA() {
   randomSeed(99);
-  // Прозорий фон для буфера, щоб накладати на темний фон
-  staticMapBuffer.clear(); 
-  
-  if (!citiesData) return;
+  staticMapBuffer.background(10, 10, 20);
+  if (!citiesData) { console.error('ПОМИЛКА: cities.json!'); return; }
   let regions = citiesData[0].regions;
   for (let region of regions) {
     for (let city of region.cities) {
@@ -251,7 +240,7 @@ function buildStaticDNA() {
   launchPoints['Black_Sea'] = createLaunchCluster(32.0, 46.0, 10, 0.5); 
   launchPoints['Caspian_Sea'] = createLaunchCluster(48.0, 46.0, 10, 0.5); 
   launchPoints['Belarus'] = createLaunchCluster(28.0, 52.2, 5, 0.5); 
-  
+  console.log('Генерація "DNA" (107,000 шрамів)...');
   let tempTargetNodes = {
     frontline: generateFrontlinePoints(300),
     kyiv: [mapWithAspectRatio(30.52, 50.45)],
@@ -259,7 +248,6 @@ function buildStaticDNA() {
     central: [mapWithAspectRatio(28.68, 48.29), mapWithAspectRatio(32.26, 48.45), mapWithAspectRatio(28.46, 49.23)],
     western: [mapWithAspectRatio(24.02, 49.83), mapWithAspectRatio(25.59, 49.55), mapWithAspectRatio(24.71, 48.92)]
   };
-  
   for (let i = 0; i < TOTAL_SCARS; i++) {
     let r = random(1); 
     let targetNode;
@@ -279,63 +267,57 @@ function buildStaticDNA() {
     let startPoint = random(startCluster);
     drawScarToBuffer(startPoint, targetNode);
   }
+  console.log('Буфер "DNA" (107,000) намальовано.');
+  randomSeed(null);
   
+  let starSize = 3 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
     staticMapBuffer.fill(255, 255);
-    staticMapBuffer.circle(city.pos.x, city.pos.y, 3); // Стандартний розмір
+    staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
   }
+  staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) {
       staticMapBuffer.fill(255, 255, 200, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
       staticMapBuffer.fill(255, 255, 255, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
     }
   }
   
+  staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6; // Стандартний розмір
+      let s = 6 * STROKE_SCALE; 
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5;
+      s = 2.5 * STROKE_SCALE; 
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
+  console.log('Буфер "DNA" (Міста та Трикутники) готовий.');
 }
-
-// 🔴 ВАЖЛИВО: Ця функція тепер працює у ВІРТУАЛЬНИХ координатах (2000px)
 function mapWithAspectRatio(lon, lat) {
   let mapRatio = (bounds.maxLon - bounds.minLon) / (bounds.maxLat - bounds.minLat);
-  
-  // Використовуємо VIRTUAL_WIDTH (2000) замість width
-  let canvasRatio = VIRTUAL_WIDTH / virtualHeight;
-  
-  let mapW, mapH, offsetX, offsetY;
-  let paddingX = VIRTUAL_WIDTH * PADDING_PERCENT;
-  let paddingY = virtualHeight * PADDING_PERCENT;
-  
+  let canvasRatio = width / height;
+  let w, h, offsetX, offsetY;
+  let paddingX = width * PADDING_PERCENT;
+  let paddingY = height * PADDING_PERCENT;
   if (canvasRatio > mapRatio) {
-    mapH = virtualHeight - (paddingY * 2); 
-    mapW = mapH * mapRatio;
-    offsetX = (VIRTUAL_WIDTH - mapW) / 2; 
-    offsetY = paddingY;
+    h = height - (paddingY * 2); w = h * mapRatio;
+    offsetX = (width - w) / 2; offsetY = paddingY;
   } else {
-    mapW = VIRTUAL_WIDTH - (paddingX * 2); 
-    mapH = mapW / mapRatio;
-    offsetX = paddingX; 
-    offsetY = (virtualHeight - mapH) / 2;
+    w = width - (paddingX * 2); h = w / mapRatio;
+    offsetX = paddingX; offsetY = (height - h) / 2;
   }
-  
-  let x = map(lon, bounds.minLon, bounds.maxLon, offsetX, offsetX + mapW);
-  let y = map(lat, bounds.minLat, bounds.maxLat, offsetY + mapH, offsetY); 
+  let x = map(lon, bounds.minLon, bounds.maxLon, offsetX, offsetX + w);
+  let y = map(lat, bounds.minLat, bounds.maxLat, offsetY + h, offsetY); 
   return createVector(x, y);
 }
-
 function generateFrontlinePoints(numPoints) {
   let frontlineNodes = [];
   const waypoints = [
@@ -355,6 +337,7 @@ function generateFrontlinePoints(numPoints) {
   return frontlineNodes;
 }
 
+// === ГОДИННИК (Виправлено "Вічну Тривогу") ===
 function updateAlertStatus(alertString, errorMsg) {
   currentAlertStatus.error = errorMsg; 
   if (errorMsg) {
@@ -362,6 +345,7 @@ function updateAlertStatus(alertString, errorMsg) {
     currentAlertStatus.type = errorMsg;
     return;
   }
+  
   let isAnyCleanAlertActive = false;
   if (alertString) {
     for (const uid of REGION_UIDS_TO_WATCH) {
@@ -371,6 +355,7 @@ function updateAlertStatus(alertString, errorMsg) {
       }
     }
   }
+
   if (isAnyCleanAlertActive) {
     currentAlertStatus.isActive = true;
     currentAlertStatus.type = "АКТИВНА ФАЗА"; 
@@ -379,8 +364,18 @@ function updateAlertStatus(alertString, errorMsg) {
     currentAlertStatus.type = "НЕМАЄ ЗАГРОЗ";
   }
 }
-
 function drawUpdatedClock(realTime) {
+  // Адаптуємо розмір шрифта та відступи
+  let fontSize = 16;
+  let lineHeight = 30;
+  let boxHeight = 130;
+  
+  if (STROKE_SCALE < 1.0) { // Якщо це мобільний
+    fontSize = 12; 
+    lineHeight = 22; 
+    boxHeight = 100; 
+  }
+
   let timeString = realTime.toLocaleString('uk-UA', {
     year: 'numeric', month: 'long', day: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -399,44 +394,42 @@ function drawUpdatedClock(realTime) {
     noStroke();
     rect(0, 0, width, height);
   }
-  
-  // Годинник малюємо БЕЗ масштабування (pop() був викликаний)
   fill(0, 150);
   noStroke();
+  rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); 
   
-  // Адаптація розміру плашки під екран
-  let boxScale = width < 768 ? 0.7 : 1.0;
-  
-  push();
-  scale(boxScale);
-  rect(0, 0, 450, 130); 
   fill(255);
-  textSize(16);
+  textSize(fontSize); 
   textAlign(LEFT, TOP);
   text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
+  
   fill(statusColor);
-  text(`СТАТУС: ${status}`, 10, 40);
+  text(`СТАТУС: ${status}`, 10, 10 + lineHeight); 
+  
   let errorMsg = currentAlertStatus.error;
   if (errorMsg) {
     fill(255, 100, 100); 
-    text(`ПОМИЛКА: ${typeText}`, 10, 70);
+    text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); 
   } else {
     fill(255); 
-    text(`СТАН: ${typeText}`, 10, 70); 
+    text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); 
   }
+  
   fill(255); 
-  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 100);
-  pop();
+  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); 
 }
 
-// === КЛАС LIVEFLIGHT ===
+// === КЛАС LIVEFLIGHT (Виправлена товщина v5.5) ===
 class LiveFlight {
   constructor(startVector, endVector, simulationStartTime) {
     this.start = startVector;
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
     this.speed = 0.005; 
-    this.weight = random(0.5, 1.0); // Стандартна товщина (зменшиться scaleFactor-ом)
+    
+    // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" (v5.5) ===
+    this.weight = random(0.5, 1.0) * STROKE_SCALE; 
+    
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
     this.progressTail = 0; 
