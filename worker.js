@@ -1,4 +1,4 @@
-// === worker.js (v5.7 - Виправлено баг 'dnaCounter') ===
+// === worker.js (v5.8 - "Виправлено баг 'dnaCounter'") ===
 
 import axios from 'axios'; 
 import pg from 'pg'; 
@@ -246,14 +246,11 @@ async function generateAndStoreScars(db, startKey, regionKey, amount) {
   try {
     await db.query(queryText, newScars);
     // 🔴 === ОСЬ ВИПРАВЛЕННЯ: ===
-    //    Ми прибрали 'dnaCounter' звідси, бо 'worker' його не знає.
     console.log(`✅ (Neon) Успішно збережено ${amount} нових шрамів.`);
   } catch (err) {
     console.error('❌ Помилка запису в Neon (шрами не збережено!):', err.message);
   }
 }
 
-// === ЗАПУСКАЄМО "ХУДОЖНИКА" ===
-runWorker();
 // === ЗАПУСКАЄМО "ХУДОЖНИКА" ===
 runWorker();
