@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v6.3 - "Висока Чіткість") ===
+// === sketch.js (Фінальна Версія v7.0 - "Pixel-Perfect" + "Чисте Полотно") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -10,7 +10,8 @@ let dnaCounter = 107000;
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
 
-let STROKE_SCALE = 1.0; 
+// 🔴 === НОВИЙ АДАПТИВНИЙ МАСШТАБ ===
+let STROKE_SCALE = 1.0; // 1.0 для десктопу, 0.33-0.5 для мобільного
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -35,37 +36,29 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v6.3 - Висока Чіткість) ---
+// --- 🔴 SETUP (v7.0 - "Pixel-Perfect") ---
 function setup() {
   console.log('Розраховуємо полотно...');
   
-  pixelDensity(1); // 1. Вимикаємо Retina
+  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "РОЗМИТОСТІ" ===
+  // 1. Повертаємо полотно на ВЕСЬ екран
+  w = windowWidth;  
+  h = windowHeight; 
+  createCanvas(w, h); 
   
-  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "РОЗДІЛЬНОЇ ЗДАТНОСТІ" ===
-  // 1. Отримуємо РЕАЛЬНІ пропорції екрану
-  let aspect = windowWidth / windowHeight; 
-
-  // 2. Встановлюємо "цільову" ширину 2000px ЗАВЖДИ
-  let targetWidth = 4000; 
+  // 2. Дозволяємо p5.js використовувати повну Retina-роздільну здатність
+  //    (Ми ВИДАЛИЛИ `pixelDensity(1)`)
   
-  // 3. Встановлюємо глобальні w та h
- w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
-  h = windowHeight; // 2. Повертаємо полотно на ВЕСЬ екран
-  createCanvas(w, h);
+  // 3. Адаптуємо масштаб, щоб не було "каші"
+  //    Ми ділимо 1.0 на реальну щільність пікселів.
+  //    На десктопі: 1.0 / 1 = 1.0
+  //    На телефоні: 1.0 / 3 = 0.33
+  STROKE_SCALE = 1.0 / pixelDensity();
+  console.log(`(Адаптація) Щільність пікселів: ${pixelDensity()}. Фінальний масштаб: ${STROKE_SCALE}`);
   // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
-
-  createCanvas(w, h); // Створюємо "велике" полотно (2000px)
-  noSmooth(); // Вимикаємо "розмитість"
-  
-  // 4. Адаптуємо масштаб, щоб не було "каші"
-  if (windowWidth < 768) { // Якщо це мобільний (по ширині екрану)
-    STROKE_SCALE = 0.3; // Робимо все в 2 рази тоншим
-    console.log(`(Адаптація) Мобільний режим увімкнено. Масштаб: ${STROKE_SCALE}`);
-  }
   
   staticMapBuffer = createGraphics(w, h);
-  staticMapBuffer.pixelDensity(1); 
-  staticMapBuffer.noSmooth(); 
+  // (staticMapBuffer автоматично успадкує правильну щільність)
   
   scarColors = [
     color(255, 255, 0, 30), color(0, 255, 0, 30), color(255, 0, 255, 30),
@@ -214,6 +207,7 @@ async function checkForNewScars() {
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
+  // 🔴 Адаптуємо товщину "запечених" шрамів
   staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
@@ -282,6 +276,7 @@ function buildStaticDNA() {
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
   
+  // 🔴 Адаптуємо ЗІРКИ
   let starSize = 3 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
@@ -299,15 +294,16 @@ function buildStaticDNA() {
     }
   }
   
+  // 🔴 Адаптуємо ТРИКУТНИКИ
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6 * STROKE_SCALE; 
+      let s = 6 * STROKE_SCALE; // 🔴 Адаптуємо
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5 * STROKE_SCALE; 
+      s = 2.5 * STROKE_SCALE; // 🔴 Адаптуємо
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
@@ -382,17 +378,19 @@ function drawUpdatedClock(realTime) {
   // ЦЯ ФУНКЦІЯ БІЛЬШЕ НЕ ВИКЛИКАЄТЬСЯ
 }
 
-// === КЛАС LIVEFLIGHT (Виправлена товщина v6.0) ===
+// === КЛАС LIVEFLIGHT (Повертаємо товщину) ===
 class LiveFlight {
   constructor(startVector, endVector, simulationStartTime) {
     this.start = startVector;
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
-    this.speed = 0.0025; // 🔴 Ти можеш змінити це, якщо хочеш (0.0025 - повільніше)
     
-    // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" (v6.0) ===
-    //    Повертаємо товстіші лінії для десктопу
-    this.weight = random(1.5, 2.5) * STROKE_SCALE; 
+    // 🔴 === ВИПРАВЛЕННЯ ШВИДКОСТІ ===
+    this.speed = 0.0025; // (Вдвічі повільніше)
+    
+    // 🔴 === ВИПРАВЛЕННЯ ТОВЩИНИ ===
+    //    Повертаємо товстіші лінії
+    this.weight = random(1.0, 1.5) * STROKE_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
