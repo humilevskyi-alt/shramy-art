@@ -39,7 +39,7 @@ function preload() {
 function setup() {
   console.log('Розраховуємо полотно...');
   
-  pixelDensity(1); // Вимикаємо Retina
+  pixelDensity(1); // 1. Вимикаємо Retina
   
   // === 🔴 ОСЬ ВИПРАВЛЕННЯ "РОЗМІРУ" ===
   w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
@@ -100,7 +100,7 @@ function draw() {
   // drawUpdatedClock(realCurrentTime); // Ми "вимкнули" інтерфейс
   
   // 🔴 АЛЕ ми ЗАЛИШАЄМО "червоний фільтр",
-  //    бо він є частиною арту (ти просив його раніше)
+  //    бо він є частиною арту
   if (currentAlertStatus.isActive) {
     fill(255, 0, 0, 30); 
     noStroke();
@@ -372,56 +372,7 @@ function updateAlertStatus(alertString, errorMsg) {
 
 // === ФУНКЦІЯ, ЯКУ МИ ВИМКНУЛИ ===
 function drawUpdatedClock(realTime) {
-  // ЦЯ ФУНКЦІЯ БІЛЬШЕ НЕ ВИКЛИКАЄТЬСЯ,
-  // АЛЕ МИ ЗАЛИШАЄМО ЇЇ КОД, ПРО ВСЯК ВИПАДОК
-  
-  // let fontSize = 16;
-  // let lineHeight = 30;
-  // let boxHeight = 130;
-  
-  // if (STROKE_SCALE < 1.0) { // Якщо це мобільний
-  //   fontSize = 12; 
-  //   lineHeight = 22; 
-  //   boxHeight = 100; 
-  // }
-
-  // let timeString = realTime.toLocaleString('uk-UA', {
-  //   year: 'numeric', month: 'long', day: 'numeric',
-  //   hour: '2-digit', minute: '2-digit', second: '2-digit'
-  // });
-  // let status, statusColor;
-  // let typeText = currentAlertStatus.type;
-  // if (currentAlertStatus.isActive) {
-  //   status = `АКТИВНА ФАЗА`;
-  //   statusColor = color(255, 0, 0);
-  // } else {
-  //   status = "ОЧІКУВАННЯ";
-  //   statusColor = color(0, 255, 0); 
-  // }
-
-  // fill(0, 150);
-  // noStroke();
-  // rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); 
-  
-  // fill(255);
-  // textSize(fontSize); 
-  // textAlign(LEFT, TOP);
-  // text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
-  
-  // fill(statusColor);
-  // text(`СТАТУС: ${status}`, 10, 10 + lineHeight); 
-  
-  // let errorMsg = currentAlertStatus.error;
-  // if (errorMsg) {
-  //   fill(255, 100, 100); 
-  //   text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); 
-  // } else {
-  //   fill(255); 
-  //   text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); 
-  // }
-  
-  // fill(255); 
-  // text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); 
+  // ЦЯ ФУНКЦІЯ БІЛЬШЕ НЕ ВИКЛИКАЄТЬСЯ
 }
 
 // === КЛАС LIVEFLIGHT (Виправлена товщина v5.5) ===
