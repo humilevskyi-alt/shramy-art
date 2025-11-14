@@ -436,7 +436,7 @@ class LiveFlight {
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
     this.speed = 0.005; 
-    this.weight = random(1.0, 1.0); // Стандартна товщина (зменшиться scaleFactor-ом)
+    this.weight = random(0.5, 1.0); // Стандартна товщина (зменшиться scaleFactor-ом)
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
     this.progressTail = 0; 
