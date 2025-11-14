@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v6.0 - "Адаптивний + Стійкий") ===
+// === sketch.js (Фінальна Версія v6.2 - "Правильний Розмір" + "Чисте Полотно") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -10,8 +10,7 @@ let dnaCounter = 107000;
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
 
-// 🔴 АДАПТИВНИЙ МАСШТАБ
-let STROKE_SCALE = 1.0; // 1.0 для десктопу, 0.5 для мобільного
+let STROKE_SCALE = 1.0; 
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -25,7 +24,6 @@ let w, h;
 
 // --- ГОДИННИК ТА СТАТУС ---
 let currentAlertStatus = { isActive: false, type: "ОЧІКУВАННЯ", error: null };
-// 🔴 Всі 24 "чисті" області (для годинника)
 const REGION_UIDS_TO_WATCH = [
   31, 8, 36, 44, 10, 11, 12, 14, 15, 27, 17, 18, 19, 5, 20, 
   21, 22, 23, 3, 24, 26, 25, 13, 6, 9, 4, 7
@@ -37,34 +35,29 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v6.0 - Адаптивна Роздільна Здатність) ---
+// --- 🔴 SETUP (v6.2 - Повертаємо windowWidth) ---
 function setup() {
   console.log('Розраховуємо полотно...');
   
-  pixelDensity(1); // 1. Вимикаємо Retina
+  pixelDensity(1); // Вимикаємо Retina
   
-  // 2. Отримуємо РЕАЛЬНІ пропорції екрану
-  let aspect = windowWidth / windowHeight; 
+  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "РОЗМІРУ" ===
+  w = windowWidth;  // 1. Повертаємо полотно на ВЕСЬ екран
+  h = windowHeight; // 2. Повертаємо полотно на ВЕСЬ екран
+  createCanvas(w, h); 
+  // === КІНЕЦЬ ВИПРАВЛЕННЯ РОЗМІРУ ===
 
-  // 3. Встановлюємо "цільову" ширину для малювання
-  let targetWidth = 2000; // Базова ширина для десктопу
+  noSmooth(); // Вимикаємо "розмитість"
   
-  if (windowWidth < 768) { // Якщо це мобільний
-    targetWidth = 1200; // Використовуємо меншу, але все ще високу роздільну здатність
+  // 3. Адаптуємо масштаб, щоб не було "каші"
+  if (w < 768) { // Якщо це мобільний
     STROKE_SCALE = 0.5; // Робимо все в 2 рази тоншим
     console.log(`(Адаптація) Мобільний режим увімкнено. Масштаб: ${STROKE_SCALE}`);
   }
-
-  // 4. Встановлюємо глобальні w та h
-  w = targetWidth;
-  h = targetWidth / aspect; // Розраховуємо висоту, щоб зберегти пропорції
-
-  createCanvas(w, h); // Створюємо "велике" полотно (напр. 1200 x 2600)
-  noSmooth(); // Вимикаємо "розмитість"
   
   staticMapBuffer = createGraphics(w, h);
   staticMapBuffer.pixelDensity(1); 
-  staticMapBuffer.noSmooth(); // Вимикаємо "розмитість" і для буфера
+  staticMapBuffer.noSmooth(); 
   
   scarColors = [
     color(255, 255, 0, 30), color(0, 255, 0, 30), color(255, 0, 255, 30),
@@ -101,7 +94,19 @@ function draw() {
     attack.update(); 
     attack.display(); 
   }
-  drawUpdatedClock(realCurrentTime);
+  
+  // === 🔴 ОСЬ ВИПРАВЛЕННЯ "ЛІЧИЛЬНИКІВ" ===
+  // 3. Малюємо годинник та фільтр
+  // drawUpdatedClock(realCurrentTime); // Ми "вимкнули" інтерфейс
+  
+  // 🔴 АЛЕ ми ЗАЛИШАЄМО "червоний фільтр",
+  //    бо він є частиною арту (ти просив його раніше)
+  if (currentAlertStatus.isActive) {
+    fill(255, 0, 0, 30); 
+    noStroke();
+    rect(0, 0, width, height);
+  }
+  // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
 }
 
 // === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
@@ -151,7 +156,7 @@ async function loadAllScarsFromServer(retries) {
         lastKnownScarId = scar.id;
       }
     }
-    dnaCounter = data.dnaCounter; 
+    dnaCounter = data.dnaCounter; // Ми все ще зберігаємо лічильник (просто не малюємо)
     console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
     updateAlertStatus(null, null); 
   } catch (err) {
@@ -165,7 +170,7 @@ async function checkAlertStatus() {
   try {
     const response = await fetchWithRetry('/get-alert-status?t=' + new Date().getTime(), 1); 
     const alertString = await response.text();
-    updateAlertStatus(alertString, null); 
+    updateAlertStatus(alertString, null); // Оновлюємо годинник (для червоного фільтра)
   } catch (error) {
     console.error('Не можу отримати статус:', error);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
@@ -190,7 +195,7 @@ async function checkForNewScars() {
         }
       }
     }
-    dnaCounter = data.dnaCounter;
+    dnaCounter = data.dnaCounter; // Ми все ще оновлюємо лічильник (просто не малюємо)
   } catch (err) {
     console.error('Помилка завантаження НОВИХ шрамів (пропускаємо):', err.message);
   }
@@ -364,59 +369,59 @@ function updateAlertStatus(alertString, errorMsg) {
     currentAlertStatus.type = "НЕМАЄ ЗАГРОЗ";
   }
 }
-function drawUpdatedClock(realTime) {
-  // Адаптуємо розмір шрифта та відступи
-  let fontSize = 16;
-  let lineHeight = 30;
-  let boxHeight = 130;
-  
-  if (STROKE_SCALE < 1.0) { // Якщо це мобільний
-    fontSize = 12; 
-    lineHeight = 22; 
-    boxHeight = 100; 
-  }
 
-  let timeString = realTime.toLocaleString('uk-UA', {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
-  let status, statusColor;
-  let typeText = currentAlertStatus.type;
-  if (currentAlertStatus.isActive) {
-    status = `АКТИВНА ФАЗА`;
-    statusColor = color(255, 0, 0);
-  } else {
-    status = "ОЧІКУВАННЯ";
-    statusColor = color(0, 255, 0); 
-  }
-  if (currentAlertStatus.isActive) {
-    fill(255, 0, 0, 30); 
-    noStroke();
-    rect(0, 0, width, height);
-  }
-  fill(0, 150);
-  noStroke();
-  rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); 
+// === ФУНКЦІЯ, ЯКУ МИ ВИМКНУЛИ ===
+function drawUpdatedClock(realTime) {
+  // ЦЯ ФУНКЦІЯ БІЛЬШЕ НЕ ВИКЛИКАЄТЬСЯ,
+  // АЛЕ МИ ЗАЛИШАЄМО ЇЇ КОД, ПРО ВСЯК ВИПАДОК
   
-  fill(255);
-  textSize(fontSize); 
-  textAlign(LEFT, TOP);
-  text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
+  // let fontSize = 16;
+  // let lineHeight = 30;
+  // let boxHeight = 130;
   
-  fill(statusColor);
-  text(`СТАТУС: ${status}`, 10, 10 + lineHeight); 
+  // if (STROKE_SCALE < 1.0) { // Якщо це мобільний
+  //   fontSize = 12; 
+  //   lineHeight = 22; 
+  //   boxHeight = 100; 
+  // }
+
+  // let timeString = realTime.toLocaleString('uk-UA', {
+  //   year: 'numeric', month: 'long', day: 'numeric',
+  //   hour: '2-digit', minute: '2-digit', second: '2-digit'
+  // });
+  // let status, statusColor;
+  // let typeText = currentAlertStatus.type;
+  // if (currentAlertStatus.isActive) {
+  //   status = `АКТИВНА ФАЗА`;
+  //   statusColor = color(255, 0, 0);
+  // } else {
+  //   status = "ОЧІКУВАННЯ";
+  //   statusColor = color(0, 255, 0); 
+  // }
+
+  // fill(0, 150);
+  // noStroke();
+  // rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); 
   
-  let errorMsg = currentAlertStatus.error;
-  if (errorMsg) {
-    fill(255, 100, 100); 
-    text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); 
-  } else {
-    fill(255); 
-    text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); 
-  }
+  // fill(255);
+  // textSize(fontSize); 
+  // textAlign(LEFT, TOP);
+  // text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
   
-  fill(255); 
-  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); 
+  // fill(statusColor);
+  // text(`СТАТУС: ${status}`, 10, 10 + lineHeight); 
+  
+  // let errorMsg = currentAlertStatus.error;
+  // if (errorMsg) {
+  //   fill(255, 100, 100); 
+  //   text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); 
+  // } else {
+  //   fill(255); 
+  //   text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); 
+  // }
+  
+  // fill(255); 
+  // text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); 
 }
 
 // === КЛАС LIVEFLIGHT (Виправлена товщина v5.5) ===
