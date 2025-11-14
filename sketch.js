@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v5.4 - "Стійкий" + Виправлено "Кашу") ===
+// === sketch.js (Фінальна Версія v5.4 - "Адаптивний" + "Невбивний") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -9,6 +9,10 @@ let scarColors = [];
 let dnaCounter = 107000; 
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
+
+// 🔴 === НОВИЙ АДАПТИВНИЙ МАСШТАБ ===
+let STROKE_SCALE = 1.0; // 1.0 для десктопу, 0.5 для мобільного
+// === КІНЕЦЬ ===
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -37,15 +41,21 @@ function preload() {
 function setup() {
   console.log('Розраховуємо полотно за розміром вікна...');
   
-  // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" НА ТЕЛЕФОНАХ ===
+  // 🔴 === ВИПРАВЛЕННЯ ДЛЯ "КАШІ" НА ТЕЛЕФОНАХ v2 ===
   pixelDensity(1); // 1. Для головного полотна
   
   w = windowWidth;
   h = windowHeight;
   createCanvas(w, h);
   
+  // 🔴 2. АДАПТАЦІЯ МАСШТАБУ
+  if (w < 768) { // Якщо екран "мобільний" (менше 768px)
+    STROKE_SCALE = 0.5; // Робимо все в 2 рази тоншим/меншим
+    console.log(`(Адаптація) Мобільний режим увімкнено. Масштаб: ${STROKE_SCALE}`);
+  }
+  
   staticMapBuffer = createGraphics(w, h);
-  staticMapBuffer.pixelDensity(1); // 2. 🔴 Для БУФЕРА (де малюються шрами)
+  staticMapBuffer.pixelDensity(1); // 3. 🔴 Для БУФЕРА (де малюються шрами)
   // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
   
   scarColors = [
@@ -192,7 +202,8 @@ async function checkForNewScars() {
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
-  staticMapBuffer.strokeWeight(random(0.5, 1.5)); 
+  // 🔴 Адаптуємо товщину "запечених" шрамів
+  staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
   let dist = p5.Vector.dist(start, end);
@@ -259,30 +270,35 @@ function buildStaticDNA() {
   }
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
+  
+  // 🔴 Адаптуємо ЗІРКИ
+  let starSize = 3 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
     staticMapBuffer.fill(255, 255);
-    staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+    staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
   }
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) {
       staticMapBuffer.fill(255, 255, 200, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
       staticMapBuffer.fill(255, 255, 255, 255);
-      staticMapBuffer.circle(city.pos.x, city.pos.y, 3);
+      staticMapBuffer.circle(city.pos.x, city.pos.y, starSize);
     }
   }
+  
+  // 🔴 Адаптуємо ТРИКУТНИКИ
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6;
+      let s = 6 * STROKE_SCALE; // 🔴 Адаптуємо
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5;
+      s = 2.5 * STROKE_SCALE; // 🔴 Адаптуємо
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
@@ -333,13 +349,12 @@ function updateAlertStatus(alertString, errorMsg) {
     return;
   }
   
-  // 🔴 Перевіряємо, чи є 'A' (Тривога) ТІЛЬКИ у "чистих" областях
   let isAnyCleanAlertActive = false;
   if (alertString) {
     for (const uid of REGION_UIDS_TO_WATCH) {
       if (alertString.charAt(uid) === 'A') {
         isAnyCleanAlertActive = true;
-        break; // Знайшли, далі можна не шукати
+        break; 
       }
     }
   }
@@ -353,6 +368,17 @@ function updateAlertStatus(alertString, errorMsg) {
   }
 }
 function drawUpdatedClock(realTime) {
+  // 🔴 Адаптуємо розмір шрифта та відступи
+  let fontSize = 16;
+  let lineHeight = 30;
+  let boxHeight = 130;
+  
+  if (STROKE_SCALE < 1.0) { // Якщо це мобільний
+    fontSize = 12; // Робимо шрифт меншим
+    lineHeight = 22; // Зменшуємо відстань між рядками
+    boxHeight = 100; // Робимо чорну плашку меншою
+  }
+
   let timeString = realTime.toLocaleString('uk-UA', {
     year: 'numeric', month: 'long', day: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -373,33 +399,38 @@ function drawUpdatedClock(realTime) {
   }
   fill(0, 150);
   noStroke();
-  rect(0, 0, 450, 130); 
+  rect(0, 0, 450 * STROKE_SCALE * 1.5, boxHeight); // 🔴 Адаптуємо плашку
+  
   fill(255);
-  textSize(16);
+  textSize(fontSize); // 🔴 Адаптуємо шрифт
   textAlign(LEFT, TOP);
   text(`РЕАЛЬНИЙ ЧАС: ${timeString}`, 10, 10);
+  
   fill(statusColor);
-  text(`СТАТУС: ${status}`, 10, 40);
+  text(`СТАТУС: ${status}`, 10, 10 + lineHeight); // 🔴 Адаптуємо відступ
+  
   let errorMsg = currentAlertStatus.error;
   if (errorMsg) {
     fill(255, 100, 100); 
-    text(`ПОМИЛКА: ${typeText}`, 10, 70);
+    text(`ПОМИЛКА: ${typeText}`, 10, 10 + lineHeight * 2); // 🔴 Адаптуємо відступ
   } else {
     fill(255); 
-    text(`СТАН: ${typeText}`, 10, 70); 
+    text(`СТАН: ${typeText}`, 10, 10 + lineHeight * 2); // 🔴 Адаптуємо відступ
   }
+  
   fill(255); 
-  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 100);
+  text(`"ШРАМІВ" У DNA: ${dnaCounter}`, 10, 10 + lineHeight * 3); // 🔴 Адаптуємо відступ
 }
 
-// === КЛАС LIVEFLIGHT (без змін) ===
+// === КЛАС LIVEFLIGHT ===
 class LiveFlight {
   constructor(startVector, endVector, simulationStartTime) {
     this.start = startVector;
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
     this.speed = 0.005; 
-    this.weight = random(1.5, 1.5); 
+    // 🔴 Адаптуємо товщину "живих" шрамів
+    this.weight = random(1.5, 1.5) * STROKE_SCALE; 
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
     this.progressTail = 0; 
