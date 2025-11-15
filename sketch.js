@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v8.0 - "Фіксовані Пропорції") ===
+// === sketch.js (Фінальна Версія v10.0 - "Біла Рамка 3:2") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -10,8 +10,7 @@ let dnaCounter = 107000;
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
 
-// 🔴 === НОВИЙ АДАПТИВНИЙ МАСШТАБ ===
-let STROKE_SCALE = 1.0; // 1.0 для десктопу, 0.33-0.5 для мобільного
+let STROKE_SCALE = 1.0; 
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -21,10 +20,13 @@ const majorCityNames = [
 const TOTAL_SCARS = 107000; 
 const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
 
-// 🔴 === ОСЬ ГОЛОВНА ЗМІНА: ФІКСУЄМО ПРОПОРЦІЇ КАРТИ ===
-const MASTER_ASPECT_RATIO = 3 / 2; // Нова пропорція 3:2 (або 1.5)
+// 🔴 === ФІКСУЄМО ПРОПОРЦІЇ ПОЛОТНА ===
+const MASTER_ASPECT_RATIO = 3 / 2; // Пропорція 3:2
 
-const PADDING_PERCENT = 0.15;
+// 🔴 === Окремі відступи (поля) ===
+const PADDING_X_PERCENT = 0.15; // 15% відступ зліва/справа
+const PADDING_Y_PERCENT = 0.15; // 15% відступ зверху/знизу
+
 let w, h; 
 
 // --- ГОДИННИК ТА СТАТУС ---
@@ -40,31 +42,33 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v8.0 - "Фіксовані Пропорції") ---
+// --- 🔴 SETUP (v10.0 - "Біла Рамка 3:2") ---
 function setup() {
-  console.log('Розраховуємо полотно з фіксованими пропорціями...');
+  console.log('Розраховуємо полотно з пропорцією 3:2...');
 
-  // === 🔴 НОВА ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ ===
+  // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) ===
   let screenW = windowWidth;
   let screenH = windowHeight;
   let screenRatio = screenW / screenH;
 
-  // MASTER_ASPECT_RATIO у нас ~2.26 (дуже широкий)
-
   if (screenRatio > MASTER_ASPECT_RATIO) {
-    // Екран *ще ширший* за нашу карту (рідкісний випадок)
-    // Вписуємо по висоті, будуть чорні смуги (pillarbox) зліва/справа
+    // Екран ширший за 3:2. Вписуємо по висоті.
     h = screenH;
     w = h * MASTER_ASPECT_RATIO;
   } else {
-    // Екран *вужчий* за нашу карту (99% випадків: телефон, 16:9 монітор)
-    // Вписуємо по ширині, будуть чорні смуги (letterbox) зверху/знизу
+    // Екран вужчий за 3:2. Вписуємо по ширині.
     w = screenW;
     h = w / MASTER_ASPECT_RATIO;
   }
   
   createCanvas(w, h); 
   
+  // === 🔴 ДОДАЄМО БІЛУ РАМКУ (CSS) ===
+  // (Використовуємо `canvas`, щоб звернутися до HTML-елемента, який створив p5)
+  canvas.style.border = "15px solid white"; // 💡 Можете змінити '15px' на '10px' або '20px'
+  canvas.style.boxSizing = "border-box"; // Важливо, щоб рамка не "розпирала" полотно
+  // === КІНЕЦЬ ===
+
   // === 🔴 ДІАГНОСТИКА ===
   console.log('--- 🔴 ДІАГНОСТИКА РОЗМІРУ ---');
   console.log(`windowWidth: ${windowWidth}, windowHeight: ${windowHeight}`);
@@ -73,22 +77,21 @@ function setup() {
   console.log('------------------------------');
   // === 🔴 КІНЕЦЬ ДІАГНОСТИКИ ===
   
-  console.log(`(Фіксація) Екран: ${screenW}x${screenH}. Майстер-Пропорція: ${MASTER_ASPECT_RATIO}. Створено полотно: ${w}x${h}`);
+  console.log(`(Рамка 3:2) Екран: ${screenW}x${screenH}. Створено полотно: ${w}x${h}`);
   
-  // 🔴 ВАЖЛИВО: Центрування полотна та чорні смуги
-  // Ми кажемо сторінці (HTML) стати темною і вирівняти наше полотно по центру
+  // === 🔴 Центрування полотна + чорні смуги ===
   document.body.style.backgroundColor = '#0A0A14'; // Фон = колір нашої карти (10, 10, 20)
   document.body.style.display = 'flex';
   document.body.style.alignItems = 'center';
   document.body.style.justifyContent = 'center';
   document.body.style.margin = '0';
   document.body.style.overflow = 'hidden'; // Сховати прокрутку
-  // === КІНЕЦЬ НОВОЇ ЛОГІКИ ===
+  // === КІНЕЦЬ ===
 
 
   // === Стара логіка (залишається незмінною) ===
   
-  // 3. Адаптуємо масштаб, щоб не було "каші"
+  // Адаптуємо масштаб
   STROKE_SCALE = 1.0 / pixelDensity();
   console.log(`(Адаптація) Щільність пікселів: ${pixelDensity()}. Фінальний масштаб: ${STROKE_SCALE}`);
   
@@ -100,18 +103,18 @@ function setup() {
     color(100, 0, 255, 30)
   ];
 
-  // 1. "Запікаємо" нашу ІСТОРІЮ (107,000)
+  // 1. "Запікаємо" нашу ІСТОРІЮ
   buildStaticDNA();
   
-  // 2. Завантажуємо "ПАМ'ЯТЬ" (всі збережені шрами з Neon)
-  loadAllScarsFromServer(3); // 3 спроби
+  // 2. Завантажуємо "ПАМ'ЯТЬ"
+  loadAllScarsFromServer(3);
   
-  // 3. Запускаємо "пульс" годинника (питає ТІЛЬКИ статус)
+  // 3. Запускаємо "пульс" годинника
   checkAlertStatus(); 
   setInterval(checkAlertStatus, 10000); 
   
-  // 4. Запускаємо "пульс" шрамів (питає про НОВІ шрами)
-  setInterval(checkForNewScars, 30000); // Кожні 30 секунд
+  // 4. Запускаємо "пульс" шрамів
+  setInterval(checkForNewScars, 30000);
 }
 // === КІНЕЦЬ SETUP ===
 
@@ -131,27 +134,20 @@ function draw() {
   }
   
   // === 🔴 "ЧИСТЕ ПОЛОТНО" (ПУЛЬСУЮЧИЙ АЛЕРТ) ===
-  // 3. Малюємо годинник та фільтр
-  // drawUpdatedClock(realCurrentTime); // Ми "вимкнули" інтерфейс
-  
   if (currentAlertStatus.isActive) {
-        // 🔴 Визначимо прозорість для пульсації
-        // ...
-        let alphaValue = map(sin(millis() * 0.005), -1, 1, 100, 255); 
-        
-        fill(255, 0, 0, alphaValue); // Червоний колір з пульсуючою прозорістю
-        noStroke();
-        
-        // 🟢 === АДАПТИВНИЙ ТЕКСТ ===
-        // Робимо розмір тексту та відступ залежними від висоти полотна
-        let relativeTextSize = height * 0.05; // Текст = 5% від висоти полотна
-        let relativePadding = height * 0.04; // Відступ = 4% від висоти полотна
-        
-        textSize(relativeTextSize); 
-        textAlign(CENTER, TOP); 
-        text("AIR ALERT", width / 4, relativePadding); // Малюємо текст з відносним відступом
-        // === КІНЕЦЬ ===
-      }
+    let alphaValue = map(sin(millis() * 0.005), -1, 1, 100, 255); 
+    fill(255, 0, 0, alphaValue);
+    noStroke();
+    
+    // Адаптивний текст
+    let relativeTextSize = height * 0.05; 
+    let relativePadding = height * 0.04; 
+    
+    textSize(relativeTextSize); 
+    textAlign(CENTER, TOP); 
+    text("АЛЕРТ", width / 2, relativePadding);
+  }
+  // === КІНЕЦЬ ===
 }
 
 // === "ХУДОЖНИК" ЗАПИТУЄ ДАНІ ===
@@ -201,7 +197,7 @@ async function loadAllScarsFromServer(retries) {
         lastKnownScarId = scar.id;
       }
     }
-    dnaCounter = data.dnaCounter; // Ми все ще зберігаємо лічильник (просто не малюємо)
+    dnaCounter = data.dnaCounter;
     console.log(`✅ (Neon) Завантажено ${data.scars.length} шрамів. ${bakedCount} "запечено", ${liveCount} "в ефірі". Останній ID: ${lastKnownScarId}`);
     updateAlertStatus(null, null); 
   } catch (err) {
@@ -215,7 +211,7 @@ async function checkAlertStatus() {
   try {
     const response = await fetchWithRetry('/get-alert-status?t=' + new Date().getTime(), 1); 
     const alertString = await response.text();
-    updateAlertStatus(alertString, null); // Оновлюємо годинник (для червоного фільтра)
+    updateAlertStatus(alertString, null);
   } catch (error) {
     console.error('Не можу отримати статус:', error);
     updateAlertStatus(null, 'ПОМИЛКА ЗВ\'ЯЗКУ');
@@ -240,7 +236,7 @@ async function checkForNewScars() {
         }
       }
     }
-    dnaCounter = data.dnaCounter; // Ми все ще оновлюємо лічильник (просто не малюємо)
+    dnaCounter = data.dnaCounter;
   } catch (err) {
     console.error('Помилка завантаження НОВИХ шрамів (пропускаємо):', err.message);
   }
@@ -252,7 +248,6 @@ async function checkForNewScars() {
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
-  // 🔴 Адаптуємо товщину "запечених" шрамів
   staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
@@ -321,7 +316,7 @@ function buildStaticDNA() {
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
   
-  // 🔴 Адаптуємо ЗІРКИ
+  // Адаптуємо ЗІРКИ
   let starSize = 5 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
@@ -339,36 +334,48 @@ function buildStaticDNA() {
     }
   }
   
-  // 🔴 Адаптуємо ТРИКУТНИКИ
+  // Адаптуємо ТРИКУТНИКИ
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 4 * STROKE_SCALE; // 🔴 Адаптуємо
+      let s = 6 * STROKE_SCALE;
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5 * STROKE_SCALE; // 🔴 Адаптуємо
+      s = 2.5 * STROKE_SCALE;
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
   console.log('Буфер "DNA" (Міста та Трикутники) готовий.');
 }
 
-// 🔴 ЦЯ ФУНКЦІЯ ЗАЛИШАЄТЬСЯ НЕЗМІННОЮ - ВОНА ПРАЦЮЄ ПРАВИЛЬНО
+// 🔴 === ОНОВЛЕНА ФУНКЦІЯ (з окремими відступами) ===
 function mapWithAspectRatio(lon, lat) {
   let mapRatio = (bounds.maxLon - bounds.minLon) / (bounds.maxLat - bounds.minLat);
   let canvasRatio = width / height;
   let w, h, offsetX, offsetY;
-  let paddingX = width * PADDING_PERCENT;
-  let paddingY = height * PADDING_PERCENT;
+  
+  // 🔴 Тепер ми беремо відступи з окремих констант
+  let paddingX = width * PADDING_X_PERCENT;
+  let paddingY = height * PADDING_Y_PERCENT;
+
   if (canvasRatio > mapRatio) {
-    h = height - (paddingY * 2); w = h * mapRatio;
-    offsetX = (width - w) / 2; offsetY = paddingY;
+    // Екран ширший за карту. Вписуємо по висоті.
+    // Контролюємо ВЕРТИКАЛЬНІ відступи (paddingY)
+    h = height - (paddingY * 2); 
+    w = h * mapRatio;
+    offsetX = (width - w) / 2; // Горизонтальний центр - автоматично
+    offsetY = paddingY;
   } else {
-    w = width - (paddingX * 2); h = w / mapRatio;
-    offsetX = paddingX; offsetY = (height - h) / 2;
+    // Екран вужчий за карту. Вписуємо по ширині.
+    // Контролюємо ГОРИЗОНТАЛЬНІ відступи (paddingX)
+    w = width - (paddingX * 2); 
+    h = w / mapRatio;
+    offsetX = paddingX;
+    offsetY = (height - h) / 2; // Вертикальний центр - автоматично
   }
+  
   let x = map(lon, bounds.minLon, bounds.maxLon, offsetX, offsetX + w);
   let y = map(lat, bounds.minLat, bounds.maxLat, offsetY + h, offsetY); 
   return createVector(x, y);
@@ -433,12 +440,8 @@ class LiveFlight {
     this.end = endVector;
     this.simulationStartTime = simulationStartTime; 
     
-    // 🔴 === ВИПРАВЛЕННЯ ШВИДКОСТІ ===
-    this.speed = 0.0025; // (Вдвічі повільніше)
-    
-    // 🔴 === ВИПРАВЛЕННЯ ТОВЩИНИ ===
-    //    Повертаємо товстіші лінії
-    this.weight = random(1.5, 1.5) * STROKE_SCALE; 
+    this.speed = 0.0025;
+    this.weight = random(2.5, 3.5) * STROKE_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
