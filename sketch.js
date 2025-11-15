@@ -149,7 +149,7 @@ function draw() {
         
         textSize(relativeTextSize); 
         textAlign(CENTER, TOP); 
-        text("АЛЕРТ", width / 2, relativePadding); // Малюємо текст з відносним відступом
+        text("AIR ALERT", width / 1, relativePadding); // Малюємо текст з відносним відступом
         // === КІНЕЦЬ ===
       }
 }
@@ -322,7 +322,7 @@ function buildStaticDNA() {
   randomSeed(null);
   
   // 🔴 Адаптуємо ЗІРКИ
-  let starSize = 5 * STROKE_SCALE;
+  let starSize = 7 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
@@ -438,7 +438,7 @@ class LiveFlight {
     
     // 🔴 === ВИПРАВЛЕННЯ ТОВЩИНИ ===
     //    Повертаємо товстіші лінії
-    this.weight = random(2.5, 3.5) * STROKE_SCALE; 
+    this.weight = random(1.5, 1.5) * STROKE_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
