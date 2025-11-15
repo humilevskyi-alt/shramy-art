@@ -155,7 +155,7 @@ function draw() {
     let relativePadding = height * 0.04; 
     textSize(relativeTextSize); 
     textAlign(CENTER, TOP); 
-    text("АЛЕРТ", width / 2, relativePadding);
+    //text("АЛЕРТ", width / 2, relativePadding);
 
     // Малюємо пульсуючу ЧЕРВОНУ рамку
     let alphaValueBorder = map(sin(millis() * 0.005), -1, 1, 0.4, 1.0); // Від 40% до 100% прозорості
@@ -459,7 +459,7 @@ class LiveFlight {
     this.simulationStartTime = simulationStartTime; 
     
     this.speed = 0.0025;
-    this.weight = random(2.5, 3.5) * STROKE_SCALE; 
+    this.weight = random(1.5, 2.5) * STROKE_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
