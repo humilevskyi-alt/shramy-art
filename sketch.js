@@ -45,6 +45,13 @@ function setup() {
   w = windowWidth;  
   h = windowHeight; 
   createCanvas(w, h); 
+  // === 🔴 ДІАГНОСТИКА ===
+  console.log('--- 🔴 ДІАГНОСТИКА РОЗМІРУ ---');
+  console.log(`windowWidth: ${windowWidth}, windowHeight: ${windowHeight}`);
+  console.log(`pixelDensity(): ${pixelDensity()}`);
+  console.log(`Canvas width: ${width}, Canvas height: ${height}`);
+  console.log('------------------------------');
+  // === 🔴 КІНЕЦЬ ДІАГНОСТИКИ ===
   
   // 2. Дозволяємо p5.js використовувати повну Retina-роздільну здатність
   //    (Ми ВИДАЛИЛИ `pixelDensity(1)`)
