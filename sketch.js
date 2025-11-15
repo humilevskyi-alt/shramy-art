@@ -74,7 +74,6 @@ function setup() {
   
   // === 🔴 ПОЧАТКОВЕ НАЛАШТУВАННЯ РАМКИ (CSS) ===
   // Починаємо з БІЛОЇ рамки
-  canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 255, 255, 1.0)`; 
   canvas.style.boxSizing = "border-box"; 
   // === КІНЕЦЬ ===
 
