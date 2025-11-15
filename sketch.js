@@ -149,7 +149,7 @@ function draw() {
         
         textSize(relativeTextSize); 
         textAlign(CENTER, TOP); 
-        text("AIR ALERT", width / 1, relativePadding); // Малюємо текст з відносним відступом
+        text("AIR ALERT", width / 4, relativePadding); // Малюємо текст з відносним відступом
         // === КІНЕЦЬ ===
       }
 }
@@ -322,7 +322,7 @@ function buildStaticDNA() {
   randomSeed(null);
   
   // 🔴 Адаптуємо ЗІРКИ
-  let starSize = 7 * STROKE_SCALE;
+  let starSize = 5 * STROKE_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
@@ -344,7 +344,7 @@ function buildStaticDNA() {
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6 * STROKE_SCALE; // 🔴 Адаптуємо
+      let s = 4 * STROKE_SCALE; // 🔴 Адаптуємо
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
