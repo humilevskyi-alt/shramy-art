@@ -200,7 +200,7 @@ async function loadAllScarsFromServer(retries) {
     if (data.error) throw new Error(data.error);
 
     const now = new Date().getTime();
-    const hours24 = 1 * 60 * 60 * 1000; 
+    const hours24 = 6 * 60 * 60 * 1000; 
     let bakedCount = 0;
     let liveCount = 0;
 
@@ -497,7 +497,7 @@ class LiveFlight {
     endShape();
   }
   isExpired(currentSimTime) {
-    const hours24 = 1 * 60 * 60 * 1000; 
+    const hours24 = 6 * 60 * 60 * 1000; 
     let expiryTime = new Date(this.simulationStartTime.getTime() + hours24);
     return currentSimTime >= expiryTime;
   }
