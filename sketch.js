@@ -22,7 +22,7 @@ const TOTAL_SCARS = 107000;
 const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
 
 // 🔴 === ОСЬ ГОЛОВНА ЗМІНА: ФІКСУЄМО ПРОПОРЦІЇ КАРТИ ===
-const MASTER_ASPECT_RATIO = (bounds.maxLon - bounds.minLon) / (bounds.maxLat - bounds.minLat); // ~2.2625
+const MASTER_ASPECT_RATIO = 3 / 2; // Нова пропорція 3:2 (або 1.5)
 
 const PADDING_PERCENT = 0.15;
 let w, h; 
