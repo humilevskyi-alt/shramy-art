@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v10.0 - "Біла Рамка 3:2") ===
+// === sketch.js (Фінальна Версія v12.0 - "Пульсуюча Червона Рамка") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -24,8 +24,14 @@ const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
 const MASTER_ASPECT_RATIO = 3 / 2; // Пропорція 3:2
 
 // 🔴 === Окремі відступи (поля) ===
-const PADDING_X_PERCENT = 0.15; // 15% відступ зліва/справа
-const PADDING_Y_PERCENT = 0.15; // 15% відступ зверху/знизу
+const PADDING_X_PERCENT = 0.15; // 15% відступ зліва/справа (всередині рамки)
+const PADDING_Y_PERCENT = 0.15; // 15% відступ зверху/знизу (всередині рамки)
+
+// 🔴 === НОВИЙ ВІДСТУП ВІД КРАЇВ ЕКРАНУ ===
+const SCREEN_PADDING_PERCENT = 0.05; // 5% "повітря" навколо білої рамки (💡 Можете змінити це значення)
+
+// 🔴 === НАЛАШТУВАННЯ РАМКИ ===
+const BORDER_WIDTH = 5; // 💡 Товщина рамки у пікселях (було 15)
 
 let w, h; 
 
@@ -42,31 +48,34 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v10.0 - "Біла Рамка 3:2") ---
+// --- 🔴 SETUP (v12.0 - "Пульсуюча Червона Рамка") ---
 function setup() {
-  console.log('Розраховуємо полотно з пропорцією 3:2...');
+  console.log('Розраховуємо полотно 3:2 з відступом...');
 
-  // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) ===
+  // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
   let screenW = windowWidth;
   let screenH = windowHeight;
-  let screenRatio = screenW / screenH;
 
-  if (screenRatio > MASTER_ASPECT_RATIO) {
-    // Екран ширший за 3:2. Вписуємо по висоті.
-    h = screenH;
+  // Віднімаємо відступи від розмірів екрану
+  let availableW = screenW * (1.0 - (SCREEN_PADDING_PERCENT * 2));
+  let availableH = screenH * (1.0 - (SCREEN_PADDING_PERCENT * 2));
+  let availableRatio = availableW / availableH;
+
+  if (availableRatio > MASTER_ASPECT_RATIO) {
+    h = availableH;
     w = h * MASTER_ASPECT_RATIO;
   } else {
-    // Екран вужчий за 3:2. Вписуємо по ширині.
-    w = screenW;
+    w = availableW;
     h = w / MASTER_ASPECT_RATIO;
   }
+  // === КІНЕЦЬ ЛОГІКИ ===
   
   createCanvas(w, h); 
   
-  // === 🔴 ДОДАЄМО БІЛУ РАМКУ (CSS) ===
-  // (Використовуємо `canvas`, щоб звернутися до HTML-елемента, який створив p5)
-  canvas.style.border = "15px solid white"; // 💡 Можете змінити '15px' на '10px' або '20px'
-  canvas.style.boxSizing = "border-box"; // Важливо, щоб рамка не "розпирала" полотно
+  // === 🔴 ПОЧАТКОВЕ НАЛАШТУВАННЯ РАМКИ (CSS) ===
+  // Задаємо товщину, тип рамки та тимчасовий колір (який буде змінюватись в draw)
+  canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 0, 0, 0)`; // 💡 Початкова прозорість 0
+  canvas.style.boxSizing = "border-box"; 
   // === КІНЕЦЬ ===
 
   // === 🔴 ДІАГНОСТИКА ===
@@ -80,12 +89,12 @@ function setup() {
   console.log(`(Рамка 3:2) Екран: ${screenW}x${screenH}. Створено полотно: ${w}x${h}`);
   
   // === 🔴 Центрування полотна + чорні смуги ===
-  document.body.style.backgroundColor = '#0A0A14'; // Фон = колір нашої карти (10, 10, 20)
+  document.body.style.backgroundColor = '#000000';
   document.body.style.display = 'flex';
   document.body.style.alignItems = 'center';
   document.body.style.justifyContent = 'center';
   document.body.style.margin = '0';
-  document.body.style.overflow = 'hidden'; // Сховати прокрутку
+  document.body.style.overflow = 'hidden'; 
   // === КІНЕЦЬ ===
 
 
@@ -133,19 +142,26 @@ function draw() {
     attack.display(); 
   }
   
-  // === 🔴 "ЧИСТЕ ПОЛОТНО" (ПУЛЬСУЮЧИЙ АЛЕРТ) ===
+  // === 🔴 АДАПТИВНИЙ ТЕКСТ "АЛЕРТ" + ПУЛЬСУЮЧА РАМКА ===
   if (currentAlertStatus.isActive) {
-    let alphaValue = map(sin(millis() * 0.005), -1, 1, 100, 255); 
-    fill(255, 0, 0, alphaValue);
+    // 🔴 Пульсація для ТЕКСТУ "АЛЕРТ"
+    let alphaValueText = map(sin(millis() * 0.005), -1, 1, 100, 255); 
+    fill(255, 0, 0, alphaValueText);
     noStroke();
     
     // Адаптивний текст
     let relativeTextSize = height * 0.05; 
     let relativePadding = height * 0.04; 
-    
     textSize(relativeTextSize); 
     textAlign(CENTER, TOP); 
     text("АЛЕРТ", width / 2, relativePadding);
+
+    // 🔴 Пульсація для РАМКИ
+    let alphaValueBorder = map(sin(millis() * 0.005), -1, 1, 0.4, 1.0); // Від 40% до 100% прозорості
+    canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 0, 0, ${alphaValueBorder})`;
+  } else {
+    // Якщо тривоги немає, рамка повністю прозора
+    canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 0, 0, 0)`;
   }
   // === КІНЕЦЬ ===
 }
@@ -262,7 +278,7 @@ function drawScarToBuffer(start, end) {
 }
 function buildStaticDNA() {
   randomSeed(99);
-  staticMapBuffer.background(10, 10, 20);
+  staticMapBuffer.background(10, 10, 20); 
   if (!citiesData) { console.error('ПОМИЛКА: cities.json!'); return; }
   let regions = citiesData[0].regions;
   for (let region of regions) {
@@ -356,24 +372,20 @@ function mapWithAspectRatio(lon, lat) {
   let canvasRatio = width / height;
   let w, h, offsetX, offsetY;
   
-  // 🔴 Тепер ми беремо відступи з окремих констант
+  // Тепер ми беремо відступи з окремих констант
   let paddingX = width * PADDING_X_PERCENT;
   let paddingY = height * PADDING_Y_PERCENT;
 
   if (canvasRatio > mapRatio) {
-    // Екран ширший за карту. Вписуємо по висоті.
-    // Контролюємо ВЕРТИКАЛЬНІ відступи (paddingY)
     h = height - (paddingY * 2); 
     w = h * mapRatio;
-    offsetX = (width - w) / 2; // Горизонтальний центр - автоматично
+    offsetX = (width - w) / 2; 
     offsetY = paddingY;
   } else {
-    // Екран вужчий за карту. Вписуємо по ширині.
-    // Контролюємо ГОРИЗОНТАЛЬНІ відступи (paddingX)
     w = width - (paddingX * 2); 
     h = w / mapRatio;
     offsetX = paddingX;
-    offsetY = (height - h) / 2; // Вертикальний центр - автоматично
+    offsetY = (height - h) / 2; 
   }
   
   let x = map(lon, bounds.minLon, bounds.maxLon, offsetX, offsetX + w);
