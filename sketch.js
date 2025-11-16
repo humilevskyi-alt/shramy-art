@@ -51,6 +51,8 @@ function preload() {
 // --- 🔴 SETUP (v13.0) ---
 function setup() {
   console.log('Розраховуємо полотно 3:2 з відступом...');
+  // Cлухаємо "інтерком"
+window.addEventListener("message", receiveMessage);
 
   // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
   let screenW = windowWidth;
@@ -501,4 +503,69 @@ class LiveFlight {
     let expiryTime = new Date(this.simulationStartTime.getTime() + hours24);
     return currentSimTime >= expiryTime;
   }
+}
+// === ЛОГІКА "ІНТЕРКОМУ" (для кнопки на сайті) ===
+
+function receiveMessage(event) {
+  // ВАЖЛИВО: Перевірка безпеки.
+  // Приймаємо команди ТІЛЬКИ від вашого сайту. 
+  // 💡 Замініть "https://humilevskyi.com" на ваш точний домен, якщо він інший
+  if (event.origin !== "https://humilevskyi.com") {
+    return; 
+  }
+
+  // Якщо команда правильна
+  if (event.data === "trigger-save") {
+    console.log("Команда 'trigger-save' отримана! Починаємо рендер...");
+    // Запускаємо нашу функцію-збереження
+    saveHighResolutionImage(); 
+  }
+}
+
+// Це та сама "офскрін" функція, яку ми обговорювали
+function saveHighResolutionImage() {
+  const w_high = 6000;
+  const h_high = 4000; // Пропорція 3:2
+
+  console.log(`Починаємо рендер ${w_high}x${h_high}...`);
+
+  // 1. Створюємо віртуальне полотно
+  let pg = createGraphics(w_high, h_high);
+
+  // 2. Обчислюємо коефіцієнт масштабування
+  // (w - це ширина нашого полотна на екрані, наприклад 1200)
+  let scaleFactor = w_high / w; 
+
+  // 3. Перемальовуємо все на віртуальне полотно
+
+  // 3a. Малюємо фон
+  pg.background(10, 10, 20); 
+
+  // 3b. Малюємо "запечені" шрами (staticMapBuffer)
+  pg.image(staticMapBuffer, 0, 0, w_high, h_high);
+
+  // 3c. Малюємо "живі" шрами (liveAttacks) зі збільшеною товщиною
+  pg.noFill();
+  for (let attack of liveAttacks) {
+    pg.stroke(attack.color);
+    // 💡 Масштабуємо товщину лінії!
+    pg.strokeWeight(attack.weight * scaleFactor); 
+
+    // 💡 Масштабуємо всі координати!
+    pg.beginShape();
+    for (let t = attack.progressTail; t < attack.progressHead; t += 0.01) { 
+      let x = bezierPoint(attack.start.x, attack.cp1_x, attack.cp2_x, attack.end.x, t);
+      let y = bezierPoint(attack.start.y, attack.cp1_y, attack.cp2_y, attack.end.y, t);
+      pg.vertex(x * scaleFactor, y * scaleFactor);
+    }
+    let headX = bezierPoint(attack.start.x, attack.cp1_x, attack.cp2_x, attack.end.x, attack.progressHead);
+    let headY = bezierPoint(attack.start.y, attack.cp1_y, attack.cp2_y, attack.end.y, attack.progressHead);
+    pg.vertex(headX * scaleFactor, headY * scaleFactor);
+    pg.endShape();
+  }
+
+  // 4. Зберігаємо файл
+  console.log("Рендер завершено. Зберігаємо...");
+  save(pg, "scars_6000x4000.png");
+  console.log("Збережено!");
 }
