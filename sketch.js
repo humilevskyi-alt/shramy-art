@@ -630,7 +630,7 @@ function saveHighResolutionImage() {
 // 🔴 === НОВА ФУНКЦІЯ: ГАРЯЧА КЛАВІША ===
 function keyPressed() {
   // Перевіряємо, чи натиснута 's' + (Ctrl (Windows) or Cmd (Mac))
-  if ((key === 's' || key === 'S') && (keyIsDown(CONTROL) || keyIsDown(META))) {
+  if ((key === 'e' || key === 'E') && (keyIsDown(CONTROL) || keyIsDown(META))) {
     
     console.log("Гаряча клавіша 'Зберегти' натиснута!");
     
