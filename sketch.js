@@ -522,7 +522,7 @@ function saveHighResolutionImage() {
 
   // Адаптуємо масштаб для високої роздільної здатності
   let tempStrokeScale = STROKE_SCALE * scaleFactor;
-  let tempStarSize = 5 * tempStrokeScale;
+  let tempStarSize = 2 * tempStrokeScale;
 
   pg.noFill();
   
