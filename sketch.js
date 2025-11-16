@@ -51,7 +51,9 @@ function preload() {
 // --- 🔴 SETUP (v13.0) ---
 function setup() {
   console.log('Розраховуємо полотно 3:2 з відступом...');
-  // Cлухаємо "інтерком"
+  // === 🔴 Вмикаємо "інтерком" ===
+  window.addEventListener("message", receiveMessage);
+  // === КІНЕЦЬ ===
 
 
   // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
@@ -506,25 +508,18 @@ class LiveFlight {
     return currentSimTime >= expiryTime;
   }
 }
-// === ЛОГІКА "ІНТЕРКОМУ" (ВИПРАВЛЕНО v15.1) ===
+// === ЛОГІКА "ІНТЕРКОМУ" (ВИПРАВЛЕНО v15.2) ===
 
 function receiveMessage(event) {
-  // 💡 ----------------------------------------------------
   // 💡 Це ваш правильний домен, з якого ми приймаємо команди
-  // 💡 ----------------------------------------------------
   const ALLOWED_ORIGIN = "https://humilevskiy.com";
 
-  // ВАЖЛИВО: Перевірка безпеки.
   // "Охоронець" перевіряє, що "голос" (event.origin) 
   // збігається з вашим сайтом (ALLOWED_ORIGIN)
-  
-  // 🔴 === ОСЬ ВИПРАВЛЕННЯ ===
-  // (Було 'ALLOWED_OCTYPE_ORIGIN', стало 'ALLOWED_ORIGIN')
   if (event.origin !== ALLOWED_ORIGIN) {
     console.warn("Повідомлення з невідомого джерела:", event.origin);
     return; 
   }
-  // === КІНЕЦЬ ВИПРАВЛЕННЯ ===
 
   // Якщо команда правильна
   if (event.data === "trigger-save") {
@@ -534,12 +529,11 @@ function receiveMessage(event) {
   }
 }
 
-// Функція "офскрін-рендерингу"
+// Функція "офскрін-рендерингу" (ВИПРАВЛЕНО v15.2)
 function saveHighResolutionImage() {
   const w_high = 6000;
-  const h_high = 4000; // Пропорція 3:2 (6000 / 4000 = 1.5)
+  const h_high = 4000; 
 
-  // Перевіряємо, чи пропорція збігається з нашою
   if (Math.abs((w_high / h_high) - MASTER_ASPECT_RATIO) > 0.01) {
     console.error("Помилка пропорцій! Запит 6000x4000 не відповідає MASTER_ASPECT_RATIO.");
     return;
@@ -547,43 +541,130 @@ function saveHighResolutionImage() {
 
   console.log(`Починаємо рендер ${w_high}x${h_high}...`);
 
-  // 1. Створюємо віртуальне полотно
-  let pg = createGraphics(w_high, h_high);
+  let pg = createGraphics(w_high, h_high); // Створюємо віртуальне полотно
   
-  // 2. Обчислюємо коефіцієнт масштабування
-  // (w - це ширина нашого полотна на екрані, наприклад 1200)
-  let scaleFactor = w_high / w; 
-
-  // 3. Перемальовуємо все на віртуальне полотно
+  // Обчислюємо коефіцієнт масштабування відносно поточної ширини полотна
+  let scaleFactor = w_high / width; 
   
-  // 3a. Малюємо фон (беремо з buildStaticDNA)
+  // 1. Задній фон
   pg.background(10, 10, 20); 
 
-  // 3b. Малюємо "запечені" шрами (staticMapBuffer)
-  // Ми "розтягуємо" готовий буфер на нове велике полотно
-  pg.image(staticMapBuffer, 0, 0, w_high, h_high);
+  // 2. Малюємо ВСІ 107,000 "DNA" шрамів з НУЛЯ на новому буфері, правильно масштабуючи
+  // Ми не можемо просто розтягнути staticMapBuffer, бо тоді шрами будуть тонкі.
+  // Нам треба перемалювати все.
+  
+  // Зберігаємо поточні налаштування випадковості
+  let currentRandomSeed = randomSeed(); 
+  randomSeed(99); // Використовуємо той самий seed, що і buildStaticDNA
 
-  // 3c. Малюємо "живі" шрами (liveAttacks)
+  // Адаптуємо масштаб для високої роздільної здатності
+  let tempStrokeScale = STROKE_SCALE * scaleFactor;
+  let tempStarSize = 5 * tempStrokeScale;
+
+  pg.noFill();
+  // (Ми припускаємо, що tempTargetNodes та launchPoints доступні глобально або з buildStaticDNA)
+  // Щоб зробити цей код на 100% надійним, нам потрібно скопіювати всю логіку buildStaticDNA
+  
+  // --- КОПІЯ ЛОГІКИ buildStaticDNA ---
+  
+  // Малюємо "запечені" шрами
+  for (let i = 0; i < TOTAL_SCARS; i++) {
+    let r = random(1); 
+    let targetNode;
+    if (r < 0.80) { targetNode = random(tempTargetNodes.frontline); }
+    else if (r < 0.85) { targetNode = random(tempTargetNodes.kyiv); }
+    else if (r < 0.90) { targetNode = random(tempTargetNodes.southern); }
+    else if (r < 0.985) { targetNode = random(tempTargetNodes.central); }
+    else { targetNode = random(tempTargetNodes.western); }
+    
+    r = random(1);
+    let startCluster;
+    if (r < 0.47) { startCluster = launchPoints['Belgorod_Bryansk']; }
+    else if (r < 0.79) { startCluster = launchPoints['Primorsko_Akhtarsk']; }
+    else if (r < 0.95) { startCluster = launchPoints['Crimea']; }
+    else if (r < 0.96) { startCluster = launchPoints['Belarus']; }
+    else if (r < 0.98) { startCluster = launchPoints['Caspian_Sea']; }
+    else { startCluster = launchPoints['Black_Sea']; }
+    
+    let startPoint = random(startCluster);
+
+    // Малюємо кожен DNA-шрам на pg з масштабуванням
+    pg.noFill();
+    pg.stroke(random(scarColors)); 
+    pg.strokeWeight(random(0.5, 1.5) * tempStrokeScale); // Масштабуємо товщину!
+    pg.beginShape();
+    pg.vertex(startPoint.x * scaleFactor, startPoint.y * scaleFactor); // Масштабуємо координати!
+    
+    let dist = p5.Vector.dist(startPoint, targetNode);
+    let bendFactor = dist * 0.5; // Фактор вигину НЕ треба масштабувати тут...
+    let cp1_x = lerp(startPoint.x, targetNode.x, 0.1) + random(-bendFactor, bendFactor);
+    let cp1_y = lerp(startPoint.y, targetNode.y, 0.1) + random(-bendFactor, bendFactor);
+    let cp2_x = lerp(startPoint.x, targetNode.x, 0.7) + random(-bendFactor, bendFactor);
+    let cp2_y = lerp(startPoint.y, targetNode.y, 0.7) + random(-bendFactor, bendFactor);
+    
+    // ...але треба масштабувати тут, при малюванні
+    pg.bezierVertex(cp1_x * scaleFactor, cp1_y * scaleFactor, 
+                     cp2_x * scaleFactor, cp2_y * scaleFactor, 
+                     targetNode.x * scaleFactor, targetNode.y * scaleFactor);
+    pg.endShape();
+  }
+  
+  // Малюємо міста
+  pg.noStroke();
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) continue;
+    pg.fill(255, 255);
+    pg.circle(city.pos.x * scaleFactor, city.pos.y * scaleFactor, tempStarSize);
+  }
+  pg.noStroke();
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) {
+      pg.fill(255, 255, 200, 255);
+      pg.circle(city.pos.x * scaleFactor, city.pos.y * scaleFactor, tempStarSize);
+      pg.fill(255, 255, 255, 255);
+      pg.circle(city.pos.x * scaleFactor, city.pos.y * scaleFactor, tempStarSize);
+    }
+  }
+  
+  // Малюємо трикутники
+  pg.noStroke();
+  for (let clusterName in launchPoints) {
+    let cluster = launchPoints[clusterName];
+    for (let launchPos of cluster) {
+      let s = 6 * tempStrokeScale;
+      pg.fill(255, 0, 0, 200);
+      pg.triangle(launchPos.x * scaleFactor, launchPos.y * scaleFactor - s, 
+                  launchPos.x * scaleFactor - s, launchPos.y * scaleFactor + s, 
+                  launchPos.x * scaleFactor + s, launchPos.y * scaleFactor + s);
+      pg.fill(255, 100, 100, 255);
+      s = 2.5 * tempStrokeScale;
+      pg.triangle(launchPos.x * scaleFactor, launchPos.y * scaleFactor - s, 
+                  launchPos.x * scaleFactor - s, launchPos.y * scaleFactor + s, 
+                  launchPos.x * scaleFactor + s, launchPos.y * scaleFactor + s);
+    }
+  }
+  // --- КІНЕЦЬ КОПІЇ buildStaticDNA ---
+  
+  // Відновлюємо randomSeed
+  randomSeed(currentRandomSeed); 
+
+  // 4. Малюємо "живі" шрами (liveAttacks) - вони тепер малюються ПОВНІСТЮ
   pg.noFill();
   for (let attack of liveAttacks) {
     pg.stroke(attack.color);
-    // 💡 Масштабуємо товщину лінії!
-    pg.strokeWeight(attack.weight * scaleFactor); 
+    pg.strokeWeight(attack.weight * scaleFactor); // Масштабуємо товщину!
 
-    // 💡 Масштабуємо всі координати!
+    // Малюємо повну лінію від початку до кінця
     pg.beginShape();
-    for (let t = attack.progressTail; t < attack.progressHead; t += 0.01) { 
+    for (let t = 0; t <= 1.0; t += 0.01) { 
       let x = bezierPoint(attack.start.x, attack.cp1_x, attack.cp2_x, attack.end.x, t);
       let y = bezierPoint(attack.start.y, attack.cp1_y, attack.cp2_y, attack.end.y, t);
       pg.vertex(x * scaleFactor, y * scaleFactor);
     }
-    let headX = bezierPoint(attack.start.x, attack.cp1_x, attack.cp2_x, attack.end.x, attack.progressHead);
-    let headY = bezierPoint(attack.start.y, attack.cp1_y, attack.cp2_y, attack.end.y, attack.progressHead);
-    pg.vertex(headX * scaleFactor, headY * scaleFactor);
     pg.endShape();
   }
 
-  // 4. Зберігаємо файл
+  // 5. Зберігаємо файл
   console.log("Рендер завершено. Зберігаємо...");
   save(pg, "scars_6000x4000.png");
   console.log("Збережено!");
