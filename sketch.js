@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v20.0 - "Пропорційний Еталон") ===
+// === sketch.js (Фінальна Версія v21.1 - "Пульсуюче Проявлення") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -10,19 +10,18 @@ let dnaCounter = 107000;
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
 
-// 🔴 === НОВА ЛОГІКА МАСШТАБУВАННЯ ===
-const ETALON_WIDTH = 2214; // Ваш "еталонний" розмір полотна з Mac
-let PROPORTIONAL_SCALE = 1.0; // Коефіцієнт (напр. 0.57 для монітора сина)
+// 🔴 === НОВА ЗМІННА: ТАЙМЕР ЗАПУСКУ ===
+let startTime; 
 
-// Базові розміри (як вони виглядають на "еталоні" 2214px)
+const ETALON_WIDTH = 2214; 
+let PROPORTIONAL_SCALE = 1.0; 
+
+// Базові розміри
 const BASE_DNA_WEIGHT = [0.5, 1.5];
 const BASE_STAR_SIZE = 5.0;
 const BASE_TRIANGLE_SIZE = 6.0;
 const BASE_TRIANGLE_INNER_SIZE = 2.5;
-const BASE_LIVE_WEIGHT = [1.5, 2.5]; // 💡 Ваші тонші лінії
-
-// (Видалено STROKE_SCALE, він більше не потрібен)
-// === КІНЕЦЬ НОВОЇ ЛОГІКИ ===
+const BASE_LIVE_WEIGHT = [1.5, 2.5]; 
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -52,7 +51,7 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v20.0) ---
+// --- 🔴 SETUP (v21.1) ---
 function setup() {
   console.log('Розраховуємо полотно 3:2 з відступом...');
 
@@ -74,8 +73,6 @@ function setup() {
   createCanvas(w, h); 
   canvas.style.boxSizing = "border-box"; 
   
-  console.log(`(Рамка 3:2) Екран: ${screenW}x${screenH}. Створено полотно: ${w}x${h}`);
-  
   // === 🔴 Центрування полотна + чорні смуги ===
   document.body.style.backgroundColor = '#000000';
   document.body.style.display = 'flex';
@@ -84,7 +81,6 @@ function setup() {
   document.body.style.margin = '0';
   document.body.style.overflow = 'hidden'; 
   // === КІНЕЦЬ ===
-
 
   // === 🔴 ОБЧИСЛЮЄМО НОВИЙ КОЕФІЦІЄНТ ===
   PROPORTIONAL_SCALE = width / ETALON_WIDTH; // width - це 'w', ширина нашого полотна
@@ -110,26 +106,53 @@ function setup() {
   
   // 4. Запускаємо "пульс" шрамів
   setInterval(checkForNewScars, 30000);
+  
+  // 🔴 === ЗАПУСКАЄМО ТАЙМЕР ===
+  startTime = millis();
 }
 // === КІНЕЦЬ SETUP ===
 
 // --- ГОЛОВНИЙ ЦИКЛ DRAW ---
 function draw() {
-  image(staticMapBuffer, 0, 0);
-  let realCurrentTime = new Date();
-  for (let i = liveAttacks.length - 1; i >= 0; i--) {
-    let attack = liveAttacks[i];
-    if (attack.isExpired(realCurrentTime)) {
-      drawScarToBuffer(attack.start, attack.end); 
-      liveAttacks.splice(i, 1); 
-      continue; 
+  
+  let elapsedTime = millis() - startTime;
+
+  // === 🔴 ЛОГІКА "ПРОЯВЛЕННЯ" ===
+  
+  // СТАН 3: Нормальна робота (після 6 секунд)
+  if (elapsedTime > 6000) {
+    image(staticMapBuffer, 0, 0); // Показуємо готову, "запечену" картину
+    
+    // І малюємо "живі" атаки
+    let realCurrentTime = new Date();
+    for (let i = liveAttacks.length - 1; i >= 0; i--) {
+      let attack = liveAttacks[i];
+      if (attack.isExpired(realCurrentTime)) {
+        drawScarToBuffer(attack.start, attack.end); 
+        liveAttacks.splice(i, 1); 
+        continue; 
+      }
+      attack.update(); 
+      attack.display(); 
     }
-    attack.update(); 
-    attack.display(); 
+  } 
+  // СТАН 2: Зірки + Трикутники (3-6 секунд)
+  else if (elapsedTime > 3000) {
+    background(10, 10, 20); // Чистимо фон
+    drawStarsOnly();       // Малюємо зірки
+    drawTrianglesOnly();   // Малюємо трикутники
+  } 
+  // СТАН 1: Тільки Зірки (0-3 секунди)
+  else {
+    background(10, 10, 20); // Чистимо фон
+    drawStarsOnly();       // Малюємо тільки зірки
   }
   
-  // === 🔴 ЛОГІКА ТЕКСТУ "АЛЕРТ" + ПУЛЬСУЮЧА/БІЛА РАМКА ===
+  // === КІНЕЦЬ ЛОГІКИ "ПРОЯВЛЕННЯ" ===
   
+
+  // === 🔴 ЛОГІКА РАМКИ ===
+  // (Працює завжди, незалежно від стану "проявлення")
   if (currentAlertStatus.isActive) {
     // --- 1. Є ТРИВОГА ---
     let alphaValueBorder = map(sin(millis() * 0.005), -1, 1, 0.4, 1.0); 
@@ -311,7 +334,7 @@ function buildStaticDNA() {
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
   
-  // 🔴 Адаптуємо ЗІРКИ
+  // 🔴 Адаптуємо ЗІРКИ (Малюємо їх у буфер)
   let starSize = BASE_STAR_SIZE * PROPORTIONAL_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
@@ -329,7 +352,7 @@ function buildStaticDNA() {
     }
   }
   
-  // 🔴 Адаптуємо ТРИКУТНИКИ
+  // 🔴 Адаптуємо ТРИКУТНИКИ (Малюємо їх у буфер)
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
@@ -476,4 +499,49 @@ class LiveFlight {
   }
 }
 
-// === 🔴 ВСЯ ЛОГІКА ІНТЕРКОМУ ТА ЗБЕРЕЖЕННЯ ВИДАЛЕНА ===
+// 🔴 === НОВІ ФУНКЦІЇ ДЛЯ "ПРОЯВЛЕННЯ" (v21.1 з пульсацією) ===
+
+// (Цей код - копія з buildStaticDNA, але він малює на головне полотно)
+function drawStarsOnly() {
+  let starSize = BASE_STAR_SIZE * PROPORTIONAL_SCALE;
+  noStroke();
+  
+  // 🔴 Логіка пульсації (від 40% до 100% прозорості)
+  let alphaValue = map(sin(millis() * 0.005), -1, 1, 100, 255); 
+
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) continue;
+    fill(255, alphaValue); // 🔴 Застосовуємо пульсацію
+    circle(city.pos.x, city.pos.y, starSize);
+  }
+  noStroke();
+  for (let city of allCities) {
+    if (majorCityNames.includes(city.name)) {
+      fill(255, 255, 200, alphaValue); // 🔴 Застосовуємо пульсацію
+      circle(city.pos.x, city.pos.y, starSize);
+      fill(255, 255, 255, alphaValue); // 🔴 Застосовуємо пульсацію
+      circle(city.pos.x, city.pos.y, starSize);
+    }
+  }
+}
+
+function drawTrianglesOnly() {
+  noStroke();
+  
+  // 🔴 Логіка пульсації (від 40% до 100% прозорості)
+  // Використовуємо трохи іншу швидкість (0.006), щоб вона не "зливалася" з зірками
+  let alphaValue = map(sin(millis() * 0.006), -1, 1, 100, 255);
+  let alphaValueDim = map(sin(millis() * 0.006), -1, 1, 80, 200); // Для темнішого кольору
+
+  for (let clusterName in launchPoints) {
+    let cluster = launchPoints[clusterName];
+    for (let launchPos of cluster) {
+      let s = BASE_TRIANGLE_SIZE * PROPORTIONAL_SCALE;
+      fill(255, 0, 0, alphaValueDim); // 🔴 Застосовуємо пульсацію
+      triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
+      fill(255, 100, 100, alphaValue); // 🔴 Застосовуємо пульсацію
+      s = BASE_TRIANGLE_INNER_SIZE * PROPORTIONAL_SCALE;
+      triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
+    }
+  }
+}
