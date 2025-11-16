@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v19.0 - "Тільки Показ") ===
+// === sketch.js (Фінальна Версія v20.0 - "Пропорційний Еталон") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -9,9 +9,20 @@ let scarColors = [];
 let dnaCounter = 107000; 
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
-// (Видалено tempTargetNodes)
 
-let STROKE_SCALE = 1.0; 
+// 🔴 === НОВА ЛОГІКА МАСШТАБУВАННЯ ===
+const ETALON_WIDTH = 2214; // Ваш "еталонний" розмір полотна з Mac
+let PROPORTIONAL_SCALE = 1.0; // Коефіцієнт (напр. 0.57 для монітора сина)
+
+// Базові розміри (як вони виглядають на "еталоні" 2214px)
+const BASE_DNA_WEIGHT = [0.5, 1.5];
+const BASE_STAR_SIZE = 5.0;
+const BASE_TRIANGLE_SIZE = 6.0;
+const BASE_TRIANGLE_INNER_SIZE = 2.5;
+const BASE_LIVE_WEIGHT = [1.5, 2.5]; // 💡 Ваші тонші лінії
+
+// (Видалено STROKE_SCALE, він більше не потрібен)
+// === КІНЕЦЬ НОВОЇ ЛОГІКИ ===
 
 const majorCityNames = [
   "Харків", "Дніпро", "Запоріжжя", "Миколаїв", "Київ", "Одеса",
@@ -21,8 +32,6 @@ const majorCityNames = [
 const TOTAL_SCARS = 107000; 
 const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
 const MASTER_ASPECT_RATIO = 3 / 2; 
-
-// 💡 Ваші поточні відступи (5%)
 const PADDING_X_PERCENT = 0.05; 
 const PADDING_Y_PERCENT = 0.05; 
 const SCREEN_PADDING_PERCENT = 0.05;
@@ -43,11 +52,9 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v19.0) ---
+// --- 🔴 SETUP (v20.0) ---
 function setup() {
   console.log('Розраховуємо полотно 3:2 з відступом...');
-
-  // (Видалено "слухача" інтеркому)
 
   // === ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
   let screenW = windowWidth;
@@ -67,13 +74,6 @@ function setup() {
   createCanvas(w, h); 
   canvas.style.boxSizing = "border-box"; 
   
-  // === 🔴 ДІАГНОСТИКА ===
-  console.log('--- 🔴 ДІАГНОСТИКА РОЗМІРУ ---');
-  console.log(`windowWidth: ${windowWidth}, windowHeight: ${windowHeight}`);
-  console.log(`pixelDensity(): ${pixelDensity()}`);
-  console.log(`Canvas width: ${width}, Canvas height: ${height}`);
-  console.log('------------------------------');
-  
   console.log(`(Рамка 3:2) Екран: ${screenW}x${screenH}. Створено полотно: ${w}x${h}`);
   
   // === 🔴 Центрування полотна + чорні смуги ===
@@ -86,9 +86,9 @@ function setup() {
   // === КІНЕЦЬ ===
 
 
-  // === Стара логіка (залишається незмінною) ===
-  STROKE_SCALE = 1.0 / pixelDensity();
-  console.log(`(Адаптація) Щільність пікселів: ${pixelDensity()}. Фінальний масштаб: ${STROKE_SCALE}`);
+  // === 🔴 ОБЧИСЛЮЄМО НОВИЙ КОЕФІЦІЄНТ ===
+  PROPORTIONAL_SCALE = width / ETALON_WIDTH; // width - це 'w', ширина нашого полотна
+  console.log(`(Адаптація) Еталон: ${ETALON_WIDTH}px. Поточна: ${width}px. Коефіцієнт: ${PROPORTIONAL_SCALE}`);
   
   staticMapBuffer = createGraphics(w, h);
   
@@ -240,7 +240,8 @@ async function checkForNewScars() {
 function drawScarToBuffer(start, end) {
   staticMapBuffer.noFill();
   staticMapBuffer.stroke(random(scarColors)); 
-  staticMapBuffer.strokeWeight(random(0.5, 1.5) * STROKE_SCALE); 
+  // 🔴 Використовуємо новий коефіцієнт
+  staticMapBuffer.strokeWeight(random(BASE_DNA_WEIGHT[0], BASE_DNA_WEIGHT[1]) * PROPORTIONAL_SCALE); 
   staticMapBuffer.beginShape();
   staticMapBuffer.vertex(start.x, start.y);
   let dist = p5.Vector.dist(start, end);
@@ -280,7 +281,6 @@ function buildStaticDNA() {
   launchPoints['Belarus'] = createLaunchCluster(28.0, 52.2, 5, 0.5); 
   console.log('Генерація "DNA" (107,000 шрамів)...');
   
-  // 🔴 ПОВЕРТАЄМО "let", щоб зробити змінну локальною
   let tempTargetNodes = { 
     frontline: generateFrontlinePoints(300),
     kyiv: [mapWithAspectRatio(30.52, 50.45)],
@@ -311,8 +311,8 @@ function buildStaticDNA() {
   console.log('Буфер "DNA" (107,000) намальовано.');
   randomSeed(null);
   
-  // Адаптуємо ЗІРКИ
-  let starSize = 5 * STROKE_SCALE;
+  // 🔴 Адаптуємо ЗІРКИ
+  let starSize = BASE_STAR_SIZE * PROPORTIONAL_SCALE;
   staticMapBuffer.noStroke();
   for (let city of allCities) {
     if (majorCityNames.includes(city.name)) continue;
@@ -329,16 +329,16 @@ function buildStaticDNA() {
     }
   }
   
-  // Адаптуємо ТРИКУТНИКИ
+  // 🔴 Адаптуємо ТРИКУТНИКИ
   staticMapBuffer.noStroke();
   for (let clusterName in launchPoints) {
     let cluster = launchPoints[clusterName];
     for (let launchPos of cluster) {
-      let s = 6 * STROKE_SCALE;
+      let s = BASE_TRIANGLE_SIZE * PROPORTIONAL_SCALE;
       staticMapBuffer.fill(255, 0, 0, 200);
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
       staticMapBuffer.fill(255, 100, 100, 255);
-      s = 2.5 * STROKE_SCALE;
+      s = BASE_TRIANGLE_INNER_SIZE * PROPORTIONAL_SCALE;
       staticMapBuffer.triangle(launchPos.x, launchPos.y - s, launchPos.x - s, launchPos.y + s, launchPos.x + s, launchPos.y + s);
     }
   }
@@ -431,7 +431,8 @@ class LiveFlight {
     this.simulationStartTime = simulationStartTime; 
     
     this.speed = 0.0025;
-    this.weight = random(1.5, 2.5) * STROKE_SCALE; // 💡 Ваша зміна товщини
+    // 🔴 Використовуємо новий коефіцієнт
+    this.weight = random(BASE_LIVE_WEIGHT[0], BASE_LIVE_WEIGHT[1]) * PROPORTIONAL_SCALE; 
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
