@@ -1,4 +1,4 @@
-// === sketch.js (Фінальна Версія v13.0 - "Біла/Червона Рамка") ===
+// === sketch.js (Фінальна Версія v16.0 - "Фінальний Рендер") ===
 
 // --- ГЛОБАЛЬНІ ЗМІННІ ---
 let citiesData;
@@ -9,7 +9,7 @@ let scarColors = [];
 let dnaCounter = 107000; 
 let liveAttacks = []; 
 let lastKnownScarId = 0; 
-let tempTargetNodes = {}; // 🔴 <-- ДОДАЙТЕ ЦЕЙ РЯДОК
+let tempTargetNodes = {}; // 🔴 ЗМІНА 1: Робимо цілі глобальними
 
 let STROKE_SCALE = 1.0; 
 
@@ -20,19 +20,11 @@ const majorCityNames = [
 ];
 const TOTAL_SCARS = 107000; 
 const bounds = { minLon: 22.1, maxLon: 40.2, minLat: 44.4, maxLat: 52.4 };
-
-// 🔴 === ФІКСУЄМО ПРОПОРЦІЇ ПОЛОТНА ===
-const MASTER_ASPECT_RATIO = 3 / 2; // Пропорція 3:2
-
-// 🔴 === Окремі відступи (поля) ===
-const PADDING_X_PERCENT = 0.05; // 15% відступ зліва/справа (всередині рамки)
-const PADDING_Y_PERCENT = 0.05; // 15% відступ зверху/знизу (всередині рамки)
-
-// 🔴 === НОВИЙ ВІДСТУП ВІД КРАЇВ ЕКРАНУ ===
-const SCREEN_PADDING_PERCENT = 0.05; // 5% "повітря" навколо білої рамки (💡 Можете змінити це значення)
-
-// 🔴 === НАЛАШТУВАННЯ РАМКИ ===
-const BORDER_WIDTH = 5; // 💡 Товщина рамки у пікселях
+const MASTER_ASPECT_RATIO = 3 / 2; 
+const PADDING_X_PERCENT = 0.05; 
+const PADDING_Y_PERCENT = 0.05; 
+const SCREEN_PADDING_PERCENT = 0.05;
+const BORDER_WIDTH = 5; 
 
 let w, h; 
 
@@ -49,19 +41,17 @@ function preload() {
   citiesData = loadJSON('cities.json'); 
 }
 
-// --- 🔴 SETUP (v13.0) ---
+// --- 🔴 SETUP (v16.0) ---
 function setup() {
   console.log('Розраховуємо полотно 3:2 з відступом...');
+
   // === 🔴 Вмикаємо "інтерком" ===
-window.addEventListener("message", receiveMessage);
+  window.addEventListener("message", receiveMessage);
   // === КІНЕЦЬ ===
 
-
-  // === 🔴 ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
+  // === ЛОГІКА ФІКСОВАНИХ ПРОПОРЦІЙ (3:2) + ВІДСТУП ВІД ЕКРАНУ ===
   let screenW = windowWidth;
   let screenH = windowHeight;
-
-  // Віднімаємо відступи від розмірів екрану
   let availableW = screenW * (1.0 - (SCREEN_PADDING_PERCENT * 2));
   let availableH = screenH * (1.0 - (SCREEN_PADDING_PERCENT * 2));
   let availableRatio = availableW / availableH;
@@ -73,22 +63,16 @@ window.addEventListener("message", receiveMessage);
     w = availableW;
     h = w / MASTER_ASPECT_RATIO;
   }
-  // === КІНЕЦЬ ЛОГІКИ ===
   
   createCanvas(w, h); 
-  
-  // === 🔴 ПОЧАТКОВЕ НАЛАШТУВАННЯ РАМКИ (CSS) ===
-  // Починаємо з БІЛОЇ рамки
   canvas.style.boxSizing = "border-box"; 
-  // === КІНЕЦЬ ===
-
+  
   // === 🔴 ДІАГНОСТИКА ===
   console.log('--- 🔴 ДІАГНОСТИКА РОЗМІРУ ---');
   console.log(`windowWidth: ${windowWidth}, windowHeight: ${windowHeight}`);
   console.log(`pixelDensity(): ${pixelDensity()}`);
   console.log(`Canvas width: ${width}, Canvas height: ${height}`);
   console.log('------------------------------');
-  // === 🔴 КІНЕЦЬ ДІАГНОСТИКИ ===
   
   console.log(`(Рамка 3:2) Екран: ${screenW}x${screenH}. Створено полотно: ${w}x${h}`);
   
@@ -103,8 +87,6 @@ window.addEventListener("message", receiveMessage);
 
 
   // === Стара логіка (залишається незмінною) ===
-  
-  // Адаптуємо масштаб
   STROKE_SCALE = 1.0 / pixelDensity();
   console.log(`(Адаптація) Щільність пікселів: ${pixelDensity()}. Фінальний масштаб: ${STROKE_SCALE}`);
   
@@ -115,9 +97,7 @@ window.addEventListener("message", receiveMessage);
     color(0, 255, 255, 30), color(200, 255, 0, 30), color(255, 100, 0, 30),
     color(100, 0, 255, 30)
   ];
-// === 🔴 Вмикаємо "інтерком" ===
-  window.addEventListener("message", receiveMessage);
-  // === КІНЕЦЬ ===
+
   // 1. "Запікаємо" нашу ІСТОРІЮ
   buildStaticDNA();
   
@@ -152,28 +132,11 @@ function draw() {
   
   if (currentAlertStatus.isActive) {
     // --- 1. Є ТРИВОГА ---
-    
-    // Малюємо пульсуючий текст "АЛЕРТ"
-    let alphaValueText = map(sin(millis() * 0.005), -1, 1, 100, 255); 
-    fill(255, 0, 0, alphaValueText);
-    noStroke();
-    
-    let relativeTextSize = height * 0.05; 
-    let relativePadding = height * 0.04; 
-    textSize(relativeTextSize); 
-    textAlign(CENTER, TOP); 
-    //text("АЛЕРТ", width / 2, relativePadding);
-
-    // Малюємо пульсуючу ЧЕРВОНУ рамку
-    let alphaValueBorder = map(sin(millis() * 0.005), -1, 1, 0.4, 1.0); // Від 40% до 100% прозорості
+    let alphaValueBorder = map(sin(millis() * 0.005), -1, 1, 0.4, 1.0); 
     canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 0, 0, ${alphaValueBorder})`;
   
   } else {
     // --- 2. НЕМАЄ ТРИВОГИ ---
-    
-    // Текст "АЛЕРТ" не малюємо
-    
-    // Малюємо статичну БІЛУ рамку
     canvas.style.border = `${BORDER_WIDTH}px solid rgba(255, 255, 255, 1.0)`;
   }
   // === КІНЕЦЬ ===
@@ -207,7 +170,7 @@ async function loadAllScarsFromServer(retries) {
     if (data.error) throw new Error(data.error);
 
     const now = new Date().getTime();
-    const hours24 = 6 * 60 * 60 * 1000; 
+    const expiryTime = 6 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
     let bakedCount = 0;
     let liveCount = 0;
 
@@ -215,7 +178,7 @@ async function loadAllScarsFromServer(retries) {
       let startVec = mapWithAspectRatio(scar.start_lon, scar.start_lat);
       let endVec = mapWithAspectRatio(scar.end_lon, scar.end_lat);
       const scarTime = new Date(scar.created_at).getTime();
-      if ((now - scarTime) > hours24) {
+      if ((now - scarTime) > expiryTime) { // 💡 Використовуємо expiryTime
         drawScarToBuffer(startVec, endVec);
         bakedCount++;
       } else {
@@ -316,13 +279,16 @@ function buildStaticDNA() {
   launchPoints['Caspian_Sea'] = createLaunchCluster(48.0, 46.0, 10, 0.5); 
   launchPoints['Belarus'] = createLaunchCluster(28.0, 52.2, 5, 0.5); 
   console.log('Генерація "DNA" (107,000 шрамів)...');
-  tempTargetNodes = {
+  
+  // 🔴 ЗМІНА 2: Прибираємо "let", щоб зробити змінну глобальною
+  tempTargetNodes = { 
     frontline: generateFrontlinePoints(300),
     kyiv: [mapWithAspectRatio(30.52, 50.45)],
     southern: [mapWithAspectRatio(30.72, 46.48), mapWithAspectRatio(31.99, 46.97)],
     central: [mapWithAspectRatio(28.68, 48.29), mapWithAspectRatio(32.26, 48.45), mapWithAspectRatio(28.46, 49.23)],
     western: [mapWithAspectRatio(24.02, 49.83), mapWithAspectRatio(25.59, 49.55), mapWithAspectRatio(24.71, 48.92)]
   };
+  
   for (let i = 0; i < TOTAL_SCARS; i++) {
     let r = random(1); 
     let targetNode;
@@ -385,7 +351,6 @@ function mapWithAspectRatio(lon, lat) {
   let canvasRatio = width / height;
   let w, h, offsetX, offsetY;
   
-  // Тепер ми беремо відступи з окремих констант
   let paddingX = width * PADDING_X_PERCENT;
   let paddingY = height * PADDING_Y_PERCENT;
 
@@ -466,7 +431,7 @@ class LiveFlight {
     this.simulationStartTime = simulationStartTime; 
     
     this.speed = 0.0025;
-    this.weight = random(1.5, 2.5) * STROKE_SCALE; 
+    this.weight = random(1.5, 2.5) * STROKE_SCALE; // 💡 Ваша зміна товщини
     
     this.color = color(255, 0, 0, 220); 
     this.progressHead = 0; 
@@ -504,12 +469,13 @@ class LiveFlight {
     endShape();
   }
   isExpired(currentSimTime) {
-    const hours24 = 6 * 60 * 60 * 1000; 
-    let expiryTime = new Date(this.simulationStartTime.getTime() + hours24);
-    return currentSimTime >= expiryTime;
+    const expiryTime = 6 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
+    let expiryDate = new Date(this.simulationStartTime.getTime() + expiryTime);
+    return currentSimTime >= expiryDate;
   }
 }
-// === ЛОГІКА "ІНТЕРКОМУ" (ВИПРАВЛЕНО v15.4 - Повний ре-рендер) ===
+
+// === 🔴 ЗМІНА 3: ПОВНІСТЮ НОВА ЛОГІКА "ІНТЕРКОМУ" (v16.0) ===
 
 function receiveMessage(event) {
   // 💡 Це ваш правильний домен, з якого ми приймаємо команди
@@ -528,7 +494,7 @@ function receiveMessage(event) {
   }
 }
 
-// Функція "офскрін-рендерингу" (v15.4)
+// Функція "офскрін-рендерингу" (v16.0 - Повний ре-рендер)
 function saveHighResolutionImage() {
   const w_high = 6000;
   const h_high = 4000; 
@@ -538,7 +504,7 @@ function saveHighResolutionImage() {
     return;
   }
 
-  console.log(`Починаємо рендер ${w_high}x${h_high}...`);
+  console.log(`Починаємо рендер ${w_high}x${h_high}... Це може зайняти час.`);
 
   let pg = createGraphics(w_high, h_high); // Створюємо віртуальне полотно
   
