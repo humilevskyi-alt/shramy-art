@@ -217,7 +217,7 @@ async function loadAllScarsFromServer(retries) {
     if (data.error) throw new Error(data.error);
 
     const now = new Date().getTime();
-    const expiryTime = 12 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
+    const expiryTime = 24 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
     let bakedCount = 0;
     let liveCount = 0;
 
