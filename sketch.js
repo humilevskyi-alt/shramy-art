@@ -517,7 +517,7 @@ class LiveFlight {
     endShape();
   }
   isExpired(currentSimTime) {
-    const expiryTime = 12 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
+    const expiryTime = 24 * 60 * 60 * 1000; // 💡 Ваша зміна на 6 годин
     let expiryDate = new Date(this.simulationStartTime.getTime() + expiryTime);
     return currentSimTime >= expiryDate;
   }
